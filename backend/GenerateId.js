@@ -1,0 +1,128 @@
+const db = require("./db");
+
+const generateCustomerId = async () => {
+    return new Promise((resolve, reject) => {
+        const query = "SELECT CustomerID FROM Customers ORDER BY CustomerID DESC LIMIT 1";
+
+        db.query(query, (err, result) => {
+            if (err) {
+                console.error("Error fetching last ID:", err);
+                return reject(err);
+            }
+
+            let newId;
+            if (result.length === 0 || !result[0].CustomerID) {
+                newId = "C-0001"; // First entry
+            } else {
+                let lastId = result[0].CustomerID; // Example: "C-0009"
+                let lastNum = parseInt(lastId.split("-")[1], 10) || 0; // Ensure it's a number
+                let nextNum = lastNum + 1;
+                newId = `C-${nextNum.toString().padStart(4, "0")}`; // Format "C-0010"
+            }
+            resolve(newId);
+        });
+    });
+};
+
+const generateAppointmentId = async () => {
+    return new Promise((resolve, reject) => {
+        const query = "SELECT AppointmentID FROM Appointments ORDER BY AppointmentID DESC LIMIT 1";
+
+        db.query(query, (err, result) => {
+            if (err) {
+                console.error("Error fetching last AppointmentID:", err);
+                return reject(err);
+            }
+
+            let newId;
+            if (result.length === 0 || !result[0].AppointmentID) {
+                newId = "A-0001"; // First appointment
+            } else {
+                let lastId = result[0].AppointmentID; // Example: "A-0009"
+                let lastNum = parseInt(lastId.split("-")[1], 10) || 0; // Ensure it's a number
+                let nextNum = lastNum + 1;
+                newId = `A-${nextNum.toString().padStart(4, "0")}`; // Format "A-0010"
+            }
+            resolve(newId);
+        });
+    });
+};
+
+
+const generateEmployeeId = async (role) => {
+    return new Promise((resolve, reject) => {
+        let prefix;
+
+        switch (role.toLowerCase()) {
+            case "admin":
+                prefix = "A";
+                break;
+            case "service advisor":
+                prefix = "SA";
+                break;
+            case "mechanic":
+                prefix = "M";
+                break;
+            case "team leader":
+                prefix = "TL";
+                break;
+            default:
+                return reject(new Error("Invalid role provided"));
+        }
+
+        const query = `SELECT EmployeeID FROM Employees WHERE EmployeeID LIKE '${prefix}-%' ORDER BY EmployeeID DESC LIMIT 1`;
+
+        db.query(query, (err, result) => {
+            if (err) {
+                console.error("Error fetching last EmployeeID:", err);
+                return reject(err);
+            }
+
+            let newId;
+            if (result.length === 0 || !result[0].EmployeeID) {
+                newId = `${prefix}-001`; // First employee in this role
+            } else {
+                let lastId = result[0].EmployeeID; // Example: "A-009"
+                let lastNum = parseInt(lastId.split("-")[1], 10) || 0; // Extract number
+                let nextNum = lastNum + 1;
+                newId = `${prefix}-${nextNum.toString().padStart(3, "0")}`; // Format "A-010"
+            }
+            resolve(newId);
+        });
+    });
+};
+
+const generateJobCardId = async () => {
+    return new Promise((resolve, reject) => {
+        const query = "SELECT JobCardID FROM JobCards ORDER BY JobCardID DESC LIMIT 1";
+
+        db.query(query, (err, result) => {
+            if (err) {
+                console.error("Error fetching last JobCardID:", err);
+                return reject(err);
+            }
+
+            let newId;
+            if (result.length === 0 || !result[0].JobCardID) {
+                newId = "JC-0001"; // First JobCard
+            } else {
+                let lastId = result[0].JobCardID; // Example: "JC-0009"
+                let lastNum = parseInt(lastId.split("-")[1], 10) || 0; // Ensure it's a number
+                let nextNum = lastNum + 1;
+
+                // Resetting after reaching 9999
+                if (nextNum > 9999) {
+                    nextNum = 1; // Reset to JC-00001
+                }
+
+                // Format as "JC-0001", "JC-0002", ..., "JC-9999", "JC-00001"
+                newId = `JC-${nextNum.toString().padStart(5, "0")}`; // Format with 5 digits
+            }
+            resolve(newId);
+        });
+    });
+};
+
+
+
+module.exports = {generateCustomerId,generateAppointmentId,generateEmployeeId,generateJobCardId};
