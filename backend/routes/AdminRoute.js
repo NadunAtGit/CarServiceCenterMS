@@ -6,6 +6,15 @@ const { validateEmail, validatePhoneNumber } = require("../validations");
 const jwt = require("jsonwebtoken");
 const{authenticateToken,authorizeRoles}=require("../utilities");
 const moment = require("moment");
+const { v4: uuidv4 } = require("uuid");
+const multer = require("multer");
+const path = require("path");
+const admin = require("firebase-admin");
+const bucket = admin.storage().bucket(); // Firebase storage bucket
+
+// Multer Storage Config
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
 
 const router = express.Router();
 
@@ -103,6 +112,34 @@ router.post("/signin-admin", async (req, res) => {
     } catch (error) {
         console.error("Error in /signin-admin:", error);
         return res.status(500).json({ error: true, message: "Server error" });
+    }
+});
+
+router.get("/get-info-emp", authenticateToken, async (req, res) => {
+    console.log("Admin route hit: GET /get-info-emp"); 
+    try {
+        const { EmployeeID } = req.user; // Extract employeeId from the token
+
+        const query = "SELECT * FROM employees WHERE EmployeeID = ?";
+        db.query(query, [EmployeeID], (err, result) => {
+            if (err) {
+                console.error("Error fetching employee info:", err);
+                return res.status(500).json({ message: "Internal server error" });
+            }
+
+            if (result.length === 0) {
+                return res.status(404).json({ message: "Employee not found" });
+            }
+
+            res.status(200).json({
+                success: true,
+                message: "Employee information retrieved successfully",
+                employeeInfo: result[0],
+            });
+        });
+    } catch (error) {
+        console.error("Error during /get-info:", error);
+        res.status(500).json({ message: "Internal server error" });
     }
 });
 
@@ -370,11 +407,49 @@ router.post("/mark-attendance", authenticateToken, async (req, res) => {
 });
 
 
+router.post("/upload-image/:folder", authenticateToken, authorizeRoles('Admin','Customer'), upload.single("image"), async (req, res) => {
+    try {
+        const { folder } = req.params;
+        console.log("Folder:", folder);
 
+        // Sanitize folder name (remove disallowed characters such as newline)
+        const sanitizedFolder = folder.replace(/[^a-zA-Z0-9_-]/g, '');
 
+        // Validate sanitized folder
+        if (!["employeepics", "cars"].includes(sanitizedFolder)) {
+            return res.status(400).json({ error: true, message: "Invalid folder name" });
+        }
 
+        if (!req.file) {
+            return res.status(400).json({ error: true, message: "No image uploaded" });
+        }
 
+        // Generate a unique filename
+        const filename = `${sanitizedFolder}/${uuidv4()}${path.extname(req.file.originalname)}`;
+        const file = bucket.file(filename);
 
+        // Upload file to Firebase Storage
+        const stream = file.createWriteStream({
+            metadata: { contentType: req.file.mimetype },
+        });
+
+        stream.on("error", (err) => {
+            console.error("Upload error:", err);
+            return res.status(500).json({ error: true, message: "Image upload failed" });
+        });
+
+        stream.on("finish", async () => {
+            await file.makePublic(); // Make the file public
+            const imageUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
+            res.status(201).json({ imageUrl });
+        });
+
+        stream.end(req.file.buffer);
+    } catch (error) {
+        console.error("Upload error:", error);
+        res.status(500).json({ error: true, message: error.message });
+    }
+});
 
 
 
