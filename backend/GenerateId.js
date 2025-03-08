@@ -10,6 +10,8 @@ const generateCustomerId = async () => {
                 return reject(err);
             }
 
+            console.log("DB Result:", result); // Add this log to check the database result
+
             let newId;
             if (result.length === 0 || !result[0].CustomerID) {
                 newId = "C-0001"; // First entry
@@ -23,6 +25,7 @@ const generateCustomerId = async () => {
         });
     });
 };
+
 
 const generateAppointmentId = async () => {
     return new Promise((resolve, reject) => {
@@ -125,4 +128,11 @@ const generateJobCardId = async () => {
 
 
 
-module.exports = {generateCustomerId,generateAppointmentId,generateEmployeeId,generateJobCardId};
+module.exports = {
+    generateCustomerId,
+    generateAppointmentId,
+    generateEmployeeId,
+    generateJobCardId
+};
+
+

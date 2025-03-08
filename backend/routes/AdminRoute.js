@@ -199,13 +199,23 @@ router.post("/employee-login", async (req, res) => {
 
 router.post("/create-employee", authenticateToken, authorizeRoles(['Admin']), async (req, res) => {
     console.log("Request received:", req.body);
-    const { Name, Phone, Role, Username, Password, Email, ProfilePicUrl } = req.body;
+    const { name, phone, role, username, password, email, profilePicUrl } = req.body;
 
-    // Validate required fields
-    if (!Name || !Email || !Password || !Role || !Phone || !Username || !ProfilePicUrl) {
-        console.log("Missing parameters");
-        return res.status(400).json({ error: true, message: "All parameters required" });
-    }
+// Convert to expected backend format
+            const Name = name;
+            const Phone = phone;
+            const Role = role;
+            const Username = username;
+            const Password = password;
+            const Email = email;
+            const ProfilePicUrl = profilePicUrl;
+
+            if (!Name || !Email || !Password || !Role || !Phone || !Username || !ProfilePicUrl && ProfilePicUrl !== "") {
+                console.log("Missing parameters");
+                return res.status(400).json({ error: true, message: "All parameters required" });
+            }
+            
+
     if (!validateEmail(Email)) {
         return res.status(400).json({ error: "Invalid email format" });
     }
@@ -407,7 +417,7 @@ router.post("/mark-attendance", authenticateToken, async (req, res) => {
 });
 
 
-router.post("/upload-image/:folder", authenticateToken, authorizeRoles('Admin','Customer'), upload.single("image"), async (req, res) => {
+router.post("/upload-image/:folder",upload.single("image"), async (req, res) => {
     try {
         const { folder } = req.params;
         console.log("Folder:", folder);
@@ -416,7 +426,7 @@ router.post("/upload-image/:folder", authenticateToken, authorizeRoles('Admin','
         const sanitizedFolder = folder.replace(/[^a-zA-Z0-9_-]/g, '');
 
         // Validate sanitized folder
-        if (!["employeepics", "cars"].includes(sanitizedFolder)) {
+        if (!["employeepics", "cars","customerpics"].includes(sanitizedFolder)) {
             return res.status(400).json({ error: true, message: "Invalid folder name" });
         }
 
@@ -451,7 +461,53 @@ router.post("/upload-image/:folder", authenticateToken, authorizeRoles('Admin','
     }
 });
 
-
+router.get("/search-employee", async (req, res) => {
+    let { query } = req.query; // Use let instead of const to allow reassignment
+  
+    if (!query) {
+      return res.status(400).json({ error: true, message: "Search query is required" });
+    }
+  
+    query = query.trim(); // Trim the query
+    const searchQuery = `%${query}%`; // Create search query
+  
+    console.log("Search Query:", searchQuery); // Log the search query being passed
+  
+    try {
+      // Define the SQL query with placeholders for parameters
+      const sqlQuery = `SELECT * FROM Employees WHERE EmployeeID LIKE ? OR Name LIKE ? OR Role LIKE ?`;
+      console.log("Executing SQL:", sqlQuery, [searchQuery, searchQuery, searchQuery]);
+  
+      // Use db.query() with callback like in the /all-employees route
+      db.query(sqlQuery, [searchQuery, searchQuery, searchQuery], (err, result) => {
+        if (err) {
+          console.error("Database query error:", err);
+          return res.status(500).json({ error: true, message: "Internal server error" });
+        }
+  
+        // Log the result for debugging
+        console.log("Search Results:", result);
+  
+        return res.status(200).json({
+          success: true,
+          message: "Search completed successfully",
+          results: result, // Send the result as search results
+        });
+      });
+    } catch (error) {
+      console.error("Unexpected error in /search-employee:", error);
+      return res.status(500).json({ error: true, message: "Something went wrong" });
+    }
+  });
+  
+  
+  
+  
+  
+  
+  
+  
+  
 
 
 module.exports = router;

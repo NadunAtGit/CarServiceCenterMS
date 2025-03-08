@@ -98,7 +98,7 @@ const AdminHome = () => {
           )}
 
           {/* Menu Items */}
-          <nav className="mt-10">
+          <nav className="mt-5">
             {menuItems.map((item, index) => (
               <Link to={item.path} key={index} className="block">
                 <div

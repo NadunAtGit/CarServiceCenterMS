@@ -1,7 +1,7 @@
 const express = require("express");
 const bcrypt = require("bcryptjs"); // ✅ Import bcrypt
 const db = require("../db");
-const generateCustomerId = require("../GenerateId");
+const {generateCustomerId}=require("../GenerateId")
 const { validateEmail, validatePhoneNumber } = require("../validations");
 const jwt = require("jsonwebtoken");
 const{authenticateToken,authorizeRoles}=require("../utilities")
@@ -17,7 +17,7 @@ router.post("/customer-signup", async (req, res) => {
     try {
         console.log("Inside /customer-signup route handler");
 
-        const { FirstName, SecondName, Telephone, Email, Password, Username } = req.body;
+        const { FirstName, SecondName, Telephone, Email, Password, Username, profilePicUrl } = req.body;
 
         if (!FirstName || !Email || !Password || !Username) {
             return res.status(400).json({ error: "Missing required fields" });
@@ -32,11 +32,17 @@ router.post("/customer-signup", async (req, res) => {
         }
 
         // ✅ Fix: Hash the password correctly
-        const hashedPassword = await bcrypt.hash(Password, 10); 
+        const hashedPassword = await bcrypt.hash(Password, 10);
 
-        const CustomerId = await generateCustomerId();
-        const query = "INSERT INTO Customers (CustomerID, FirstName, SecondName, Telephone, Email, Password, Username) VALUES (?, ?, ?, ?, ?, ?, ?)";
-        const values = [CustomerId, FirstName, SecondName, Telephone, Email, hashedPassword, Username];
+        // Set default profilePicUrl if not provided
+        const defaultProfilePicUrl = "https://example.com/default-profile-pic.png"; // Replace with your default image URL
+        const profilePic = profilePicUrl || defaultProfilePicUrl; // Use provided URL or fallback to default
+        console.log("generateCustomerId:", generateCustomerId); 
+        // Generate Customer ID (use await here)
+        const CustomerId = await generateCustomerId(); 
+
+        const query = "INSERT INTO Customers (CustomerID, FirstName, SecondName, Telephone, Email, Password, Username, profilePicUrl) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+        const values = [CustomerId, FirstName, SecondName, Telephone, Email, hashedPassword, Username, profilePic];
 
         db.query(query, values, (err, result) => {
             if (err) {
@@ -51,6 +57,7 @@ router.post("/customer-signup", async (req, res) => {
         res.status(500).json({ error: "Internal Server Error" });
     }
 });
+
 
 router.post("/customer-login", async (req, res) => {
     const { email, password } = req.body;
@@ -132,6 +139,36 @@ router.get("/get-info", authenticateToken,authorizeRoles(['Customer']), async (r
     }
 });
 
+router.get("/get-vehicles",authenticateToken,async(req,res)=>{
+    try{
+        const { customerId } = req.user; // Extract customerId from the token
+        const query = "SELECT * FROM vehicles WHERE CustomerID = ?";
+
+        db.query(query, [customerId], (err, result) => {
+            if (err) {
+                console.error("Error fetching customer info:", err);
+                return res.status(500).json({ message: "Internal server error" });
+            }
+
+            // If customer not found
+            if (result.length === 0) {
+                return res.status(404).json({ message: "Vehicles not found" });
+            }
+
+            // Send customer info
+            res.status(200).json({
+                success: true,
+                message: "Vehicle information retrieved successfully",
+                vehicleInfo: result, // Send the first (and only) row of the result
+            });
+        });
+    }catch(error){
+        console.error("Error during /get-vehicles:", error);
+        res.status(500).json({ message: "Internal server error" });
+        
+    }
+});
+
 router.post("/add-vehicle", authenticateToken,authorizeRoles(['Customer']),  async (req, res) => {
     try {
         const { customerId } = req.user;
@@ -171,6 +208,8 @@ router.post("/add-vehicle", authenticateToken,authorizeRoles(['Customer']),  asy
         res.status(500).json({ message: "Internal server error" });
     }
 });
+
+
 
 
 
