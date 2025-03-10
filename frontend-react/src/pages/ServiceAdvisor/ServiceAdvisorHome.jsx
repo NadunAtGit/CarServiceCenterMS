@@ -1,17 +1,62 @@
-import React, { useState } from 'react';
+import React, { useState,useEffect } from 'react';
 import { FiMenu, FiLogOut } from 'react-icons/fi';
 import { FaUserCircle } from 'react-icons/fa';
 import { MdOutlineEventNote } from 'react-icons/md';
 import { FaClipboardList } from 'react-icons/fa';
-import { Link, Outlet } from 'react-router-dom';
 import UserData from '../../components/UserData';
+import axiosInstance from '../../utils/AxiosInstance';
+import { Link, Outlet, useNavigate } from 'react-router-dom';
 
 const ServiceAdvisorHome = () => {
   const [isOpen, setIsOpen] = useState(true);
+  const [userInfo, setUserInfo] = useState({}); // Ensure userInfo is initialized properly
+  const [error, setError] = useState(null);
+  const navigate = useNavigate();
+
+  const getUserInfo = async () => {
+    try {
+      const response = await axiosInstance.get("/api/admin/get-info-emp"); // Removed %0A
+      console.log("API Response:", response.data); // Debugging
+
+      if (response.data && response.data.success && response.data.employeeInfo) {
+        const employee = response.data.employeeInfo;
+
+        setUserInfo({
+          id: employee.EmployeeID,
+          username: employee.Username,
+          name: employee.Name,
+          email: employee.email,
+          role: employee.Role,
+          phone: employee.Phone,
+          rating: employee.Rating,
+          imageUrl: employee.ProfilePicUrl,
+        });
+      } else {
+        setError("Failed to retrieve employee information.");
+      }
+    } catch (error) {
+      console.error("Error fetching employee data:", error);
+      if (error.response?.status === 401) {
+        localStorage.clear();
+        navigate("/login");
+      } else {
+        setError("An error occurred while fetching employee data.");
+      }
+    }
+  };
+
+  useEffect(() => {
+    getUserInfo();
+  }, []);
 
   // Sidebar Toggle Function
   const toggleSidebar = () => {
     setIsOpen(!isOpen);
+  };
+
+  const onLogout = () => {
+    localStorage.clear();
+    navigate("/login");
   };
 
   // Sidebar Menu Items (Only Appointments & Job Card)
@@ -27,7 +72,7 @@ const ServiceAdvisorHome = () => {
         <div
           className={`${
             isOpen ? 'w-72' : 'w-20'
-          } bg-gradient-to-b from-[#ff9a9e] via-[#ff6b6b] to-[#ff3b3b] min-h-screen h-full p-5 pt-8 relative flex flex-col transition-all duration-200`}
+          } fixed bg-gradient-to-b from-[#ff6b6b] via-[#ff3b3b] to-[#ff1e1e] min-h-screen h-full p-5 pt-8 relative flex flex-col transition-all duration-200`}
         >
           {/* Sidebar Toggle Button */}
           <FiMenu
@@ -40,7 +85,7 @@ const ServiceAdvisorHome = () => {
 
           {/* User Info */}
           {isOpen ? (
-            <UserData />
+            <UserData username={userInfo.username} role={userInfo.role}/>
           ) : (
             <div className="flex items-center justify-center mt-10">
               <FaUserCircle size={40} className="text-white" />
@@ -69,6 +114,7 @@ const ServiceAdvisorHome = () => {
               className={`flex items-center text-white p-3 rounded-lg cursor-pointer transition-all duration-200 hover:bg-white/20 ${
                 isOpen ? 'justify-start gap-4' : 'justify-center'
               }`}
+              onClick={onLogout}
             >
               <FiLogOut size={26} />
               {isOpen && <span className="text-white font-medium">Logout</span>}

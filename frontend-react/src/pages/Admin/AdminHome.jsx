@@ -68,12 +68,12 @@ const AdminHome = () => {
 
   return (
     <>
-      <div className="flex min-h-screen">
+      <div className="flex h-screen overflow-hidden">
         {/* Sidebar */}
         <div
           className={`${
             isOpen ? 'w-72' : 'w-20'
-          } bg-gradient-to-b from-[#ff6b6b] via-[#ff3b3b] to-[#ff1e1e] min-h-screen h-full p-5 pt-8 relative flex flex-col transition-all duration-200`}
+          } fixed bg-gradient-to-b from-[#ff6b6b] via-[#ff3b3b] to-[#ff1e1e] min-h-screen h-full p-5 pt-8 relative flex flex-col transition-all duration-200 overflow-hidden`}
         >
           {/* Sidebar Toggle Button */}
           <FiMenu
@@ -98,7 +98,7 @@ const AdminHome = () => {
           )}
 
           {/* Menu Items */}
-          <nav className="mt-5">
+          <nav className="mt-1">
             {menuItems.map((item, index) => (
               <Link to={item.path} key={index} className="block">
                 <div
@@ -128,7 +128,7 @@ const AdminHome = () => {
         </div>
 
         {/* Main content */}
-        <div className="flex-grow p-5">
+        <div className="`flex-grow p-5 ml-${isOpen ? '72' : '20'} transition-all duration-200 h-screen overflow-y-auto w-full">
           {error && <p className="text-red-500">{error}</p>}
           <Outlet />
         </div>

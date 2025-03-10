@@ -150,6 +150,37 @@ router.put("/confirm-appointment/:id", authenticateToken,authorizeRoles(['Admin'
     }
 });
 
+router.put("/not-confirm-appointment/:id", authenticateToken,authorizeRoles(['Admin']), async (req, res) => {
+    const { id } = req.params; // Get AppointmentID from URL
+
+    try {
+        const query = "UPDATE appointments SET Status = 'Not Confirmed' WHERE AppointmentID = ?";
+        
+        const result = await new Promise((resolve, reject) => {
+            db.query(query, [id], (err, result) => {
+                if (err) {
+                    console.error("Error updating appointment status:", err);
+                    return reject(err);
+                }
+                resolve(result);
+            });
+        });
+
+        // Check if any row was affected (valid appointment ID)
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: "Appointment not found or already confirmed" });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: "Appointment confirmed successfully!",
+        });
+    } catch (error) {
+        console.error("Error confirming appointment:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
 
 router.put("/reschedule-appointment/:id", authenticateToken, async (req, res) => {
     const { id } = req.params; // Get AppointmentID from URL

@@ -48,7 +48,7 @@ const Login = () => {
             if (userRole === 'Admin') {
               navigate("/admin"); // Admin or Manager should be redirected to Home
             } else {
-              navigate("/employee-dashboard"); // Other users should be redirected to Employee Dashboard
+              navigate("/serviceadvisor"); // Other users should be redirected to Employee Dashboard
             }
           }
       }catch(error){

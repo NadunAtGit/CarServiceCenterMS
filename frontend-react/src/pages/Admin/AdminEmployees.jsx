@@ -111,7 +111,7 @@ const AdminEmployees = () => {
 
   return (
     <>
-        <div className="container mx-auto sm:overflow-hidden">
+        <div className="container mx-auto sm:overflow-hidden w-full">
       <div className="w-full flex justify-center flex-col">
         <h1 className="text-xl font-bold mb-3">Employees Data</h1>
         

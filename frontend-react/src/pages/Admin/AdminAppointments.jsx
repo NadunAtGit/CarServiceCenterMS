@@ -2,11 +2,15 @@ import React, { useEffect, useState } from "react";
 import { FiSearch } from "react-icons/fi";
 import axiosInstance from "../../utils/AxiosInstance";
 import AppointmentCard from "../../components/Cards/AppointmentCard";
+import Slider from "react-slick"; // Import react-slick
+import "slick-carousel/slick/slick.css"; // Import slick styles
+import "slick-carousel/slick/slick-theme.css";
 
 const AdminAppointments = () => {
   const [appointments, setAppointments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const[notConfirmed,setNotConfirmed]=useState([]);
 
   const fetchAppointments = async () => {
     try {
@@ -75,19 +79,80 @@ const AdminAppointments = () => {
       setIsLoading(false);
     }
   };
+
+  const fetchNotConfirmed = async () => {
+    try {
+      const response = await axiosInstance.get("api/appointments/get-not-confirmed");
+      if (response.data.success) {
+        setNotConfirmed(response.data.appointments);
+      } else {
+        console.error("Failed to fetch appointments:", response.data.message);
+      }
+    } catch (error) {
+      console.error("Error fetching appointments:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
   
   
 
   useEffect(() => {
     fetchAppointments();
+    fetchNotConfirmed();
   }, []);
 
-  return (
-    <div className="mx-auto sm:overflow-hidden">
-      <div className="w-full flex justify-center flex-col">
-        <h1 className="text-xl font-bold mb-3">Unapproved Appointments</h1>
 
-        <AppointmentCard />
+  const settings = {
+    dots: true,
+    infinite: notConfirmed.length > 1, // Enable infinite scroll if more than one appointment
+    speed: 500,
+    slidesToShow: Math.min(notConfirmed.length, 3), // Show up to 3 slides
+    slidesToScroll: 1,
+    autoplay: true,
+    autoplaySpeed: 3000,
+    centerMode: true, // Center the active slide
+    centerPadding: "0px", // Ensure full-width centering
+    responsive: [
+      {
+        breakpoint: 1024,
+        settings: {
+          slidesToShow: Math.min(notConfirmed.length, 2),
+        },
+      },
+      {
+        breakpoint: 768,
+        settings: {
+          slidesToShow: 1,
+        },
+      },
+    ],
+  };
+  
+  
+
+  return (
+    <div className="mx-auto">
+      <div className="w-full flex justify-center flex-col">
+        <h1 className="text-xl font-bold mb-3 ">Unapproved Appointments</h1>
+
+        {isLoading ? (
+          <p>Loading appointments...</p>
+        ) : notConfirmed.length === 0 ? (
+          <p className="text-xl font-bold mb-3 text-center">No unconfirmed appointments available.</p>
+        ) : (
+          <div className="flex justify-center w-full">
+  <Slider {...settings} className="mb-10 w-4/5">
+    {notConfirmed.map((appointment) => (
+      <div key={appointment.AppointmentID} className="px-2">
+        <AppointmentCard appointment={appointment} recallCarousel={fetchNotConfirmed} recallTable={fetchAppointments}/>
+      </div>
+    ))}
+  </Slider>
+</div>
+
+
+        )}
 
         <div className="w-full flex flex-row gap-3 my-5">
           <input
