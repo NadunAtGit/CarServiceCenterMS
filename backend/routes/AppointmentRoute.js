@@ -310,6 +310,36 @@ router.delete("/delete-appointment/:id", authenticateToken, authorizeRoles(["Adm
     }
 });
 
+router.get("/today", authenticateToken, authorizeRoles(["Service Advisor", "Admin"]), (req, res) => {
+    try {
+        // Get today's date in local time zone as YYYY-MM-DD
+        const today = new Date().toLocaleDateString("en-CA"); // "en-CA" ensures YYYY-MM-DD format
+
+        console.log("Server Local Date:", today); // Debugging log
+
+        const query = "SELECT * FROM Appointments WHERE Date = ?";
+
+        db.query(query, [today], (err, results) => {
+            if (err) {
+                console.error("Database error while fetching today's appointments:", err);
+                return res.status(500).json({ error: true, message: "Internal server error. Please try again later." });
+            }
+
+            if (!results || results.length === 0) {
+                return res.status(404).json({ success: false, message: "No appointments found for today." });
+            }
+
+            return res.status(200).json({ success: true, appointments: results });
+        });
+
+    } catch (error) {
+        console.error("Unexpected error in fetching today's appointments:", error);
+        return res.status(500).json({ error: true, message: "Unexpected server error. Please try again later." });
+    }
+});
+
+
+
 
 
 

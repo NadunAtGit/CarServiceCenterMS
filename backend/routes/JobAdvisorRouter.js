@@ -63,6 +63,47 @@ router.post("/create-jobcard/:appointmentId", authenticateToken, authorizeRoles(
     }
 });
 
+// router.get("/jobcards", authenticateToken, async (req, res) => {
+//     try {
+//         const query = "SELECT * FROM JobCards";
+
+//         db.query(query, (err, results) => {
+//             if (err) {
+//                 console.error("Error fetching job cards:", err);
+//                 return res.status(500).json({ error: true, message: "Database error" });
+//             }
+
+//             return res.status(200).json({
+//                 success: true,
+//                 jobCards: results,
+//             });
+//         });
+//     } catch (error) {
+//         console.error("Error in fetching job cards:", error);
+//         return res.status(500).json({ error: true, message: "Server error" });
+//     }
+// });
+
+// router.get("/jobcards/ongoing", authenticateToken, async (req, res) => {
+//     try {
+//         const query = "SELECT * FROM JobCards WHERE Status = 'Ongoing'";
+
+//         db.query(query, (err, results) => {
+//             if (err) {
+//                 console.error("Error fetching ongoing job cards:", err);
+//                 return res.status(500).json({ error: true, message: "Database error" });
+//             }
+
+//             return res.status(200).json({
+//                 success: true,
+//                 jobCards: results,
+//             });
+//         });
+//     } catch (error) {
+//         console.error("Error in fetching ongoing job cards:", error);
+//         return res.status(500).json({ error: true, message: "Server error" });
+//     }
+// });
 
 
 module.exports = router;

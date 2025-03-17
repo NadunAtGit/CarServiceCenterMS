@@ -45,7 +45,7 @@ router.get("/present-employees", authenticateToken, authorizeRoles(["Team Leader
 });
 
 
-router.get("/get-job-cards", authenticateToken, authorizeRoles(["Team Leader"]), async (req, res) => {
+router.get("/get-job-cards", authenticateToken, authorizeRoles(["Team Leader","Service Advisor"]), async (req, res) => {
     try {
         const query = "SELECT * FROM JobCards WHERE Status = 'Created'";
 
