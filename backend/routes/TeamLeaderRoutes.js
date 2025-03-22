@@ -45,6 +45,7 @@ router.get("/present-employees", authenticateToken, authorizeRoles(["Team Leader
 });
 
 
+
 router.get("/get-job-cards", authenticateToken, authorizeRoles(["Team Leader","Service Advisor"]), async (req, res) => {
     try {
         const query = "SELECT * FROM JobCards WHERE Status = 'Created'";
@@ -67,6 +68,45 @@ router.get("/get-job-cards", authenticateToken, authorizeRoles(["Team Leader","S
     } catch (error) {
         console.error("Error fetching job cards:", error);
         return res.status(500).json({ error: true, message: "Server error" });
+    }
+});
+
+router.get('/get-job-cards/today',authenticateToken,authorizeRoles(["Team Leader","Service Advisor"]), async (req, res) => {
+    try {
+        const todayDate = moment().format("YYYY-MM-DD"); // Get today's date
+
+        const query = `
+            SELECT jc.*, a.Date, a.Time, a.Status 
+            FROM JobCards jc
+            JOIN Appointments a ON jc.AppointmentID = a.AppointmentID
+            WHERE a.Date = ? AND jc.Type = 'Created'
+        `;
+
+        const jobCards = await new Promise((resolve, reject) => {
+            db.query(query, [todayDate], (err, results) => {
+                if (err) reject(err);
+                resolve(results);
+            });
+        });
+
+        if (jobCards.length === 0) {
+            return res.status(404).json({
+                error: true,
+                message: "No job cards found for today's appointments.",
+            });
+        }
+
+        return res.status(200).json({
+            error: false,
+            jobCards,
+        });
+
+    } catch (error) {
+        console.error("Error fetching today's job cards:", error);
+        return res.status(500).json({
+            error: true,
+            message: "Failed to fetch job cards for today.",
+        });
     }
 });
 

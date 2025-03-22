@@ -172,12 +172,13 @@ router.post("/employee-login", async (req, res) => {
             if (!match) {
                 return res.status(400).json({ error: true, message: "Invalid password" });
             }
+            console.log("🔹 Assigned Role in JWT:", employee.Role);
 
             // Generate JWT token for the employee
             const accessToken = jwt.sign(
                 { EmployeeID: employee.EmployeeID, email: employee.email, role: employee.Role },
                 process.env.ACCESS_TOKEN_SECRET, // Make sure to set this in your .env file
-                { expiresIn: "1h" } // Token expires in 1 hour
+                { expiresIn: "2h" } // Token expires in 1 hour
             );
 
             // Send success response with token
@@ -413,6 +414,88 @@ router.post("/mark-attendance", authenticateToken, async (req, res) => {
     } catch (error) {
         console.error("Error marking attendance:", error);
         return res.status(500).json({ error: true, message: "Failed to mark attendance. Please try again later." });
+    }
+});
+
+router.post("/mark-departure", authenticateToken, async (req, res) => {
+    try {
+        const { email } = req.user; // Get authenticated user's email
+        const todayDate = moment().format("YYYY-MM-DD"); // Get today's date
+        const departureTime = moment().format("YYYY-MM-DD HH:mm:ss"); // Get current timestamp
+
+        // Get EmployeeID from Employees table using email
+        const employeeQuery = "SELECT EmployeeID FROM Employees WHERE Email = ?";
+        const employeeResult = await new Promise((resolve, reject) => {
+            db.query(employeeQuery, [email], (err, result) => {
+                if (err) return reject(err);
+                resolve(result);
+            });
+        });
+
+        if (employeeResult.length === 0) {
+            return res.status(404).json({ error: true, message: "Employee not found" });
+        }
+
+        const employeeId = employeeResult[0].EmployeeID;
+
+        // Check if today's attendance exists
+        const checkAttendanceQuery = "SELECT * FROM Attendances WHERE EmployeeID = ? AND Date = ?";
+        const attendanceResult = await new Promise((resolve, reject) => {
+            db.query(checkAttendanceQuery, [employeeId, todayDate], (err, result) => {
+                if (err) return reject(err);
+                resolve(result);
+            });
+        });
+
+        if (attendanceResult.length === 0) {
+            return res.status(400).json({
+                error: true,
+                message: "Attendance record not found for today. Please mark attendance first.",
+            });
+        }
+
+        const attendance = attendanceResult[0];
+
+        // Ensure the employee was marked "Present" before allowing departure
+        if (attendance.Status !== "Present") {
+            return res.status(400).json({
+                error: true,
+                message: "Departure time can only be recorded for employees marked as 'Present'.",
+            });
+        }
+
+        // Ensure departure time hasn't been already recorded
+        if (attendance.DepartureTime) {
+            return res.status(400).json({
+                error: true,
+                message: "Departure time has already been marked for today.",
+            });
+        }
+
+        // Update attendance with departure time
+        const updateDepartureQuery = "UPDATE Attendances SET DepartureTime = ? WHERE EmployeeID = ? AND Date = ?";
+        await new Promise((resolve, reject) => {
+            db.query(updateDepartureQuery, [departureTime, employeeId, todayDate], (err, result) => {
+                if (err) return reject(err);
+                resolve(result);
+            });
+        });
+
+        return res.status(200).json({
+            error: false,
+            message: "Departure time marked successfully",
+            attendance: {
+                EmployeeID: employeeId,
+                Date: todayDate,
+                Status: attendance.Status,
+                ArrivalTime: attendance.ArrivalTime,
+                DepartureTime: departureTime,
+            },
+        });
+
+    } catch (error) {
+        console.error("Error marking departure:", error);
+        return res.status(500).json({ error: true, message: "Failed to mark departure. Please try again later." });
     }
 });
 

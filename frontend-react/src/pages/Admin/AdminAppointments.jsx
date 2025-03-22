@@ -108,9 +108,11 @@ const AdminAppointments = () => {
     infinite: notConfirmed.length > 1, // Enable infinite scroll if more than one appointment
     speed: 500,
     slidesToShow: Math.min(notConfirmed.length, 3), // Show up to 3 slides
-    slidesToScroll: 1,
+    slidesToScroll: 3,
     autoplay: true,
     autoplaySpeed: 3000,
+    dotsClass: "slick-dots",
+    
     centerMode: true, // Center the active slide
     centerPadding: "0px", // Ensure full-width centering
     responsive: [

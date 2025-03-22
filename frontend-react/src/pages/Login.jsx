@@ -47,10 +47,13 @@ const Login = () => {
             // Navigate to the appropriate page based on the role
             if (userRole === 'Admin') {
               navigate("/admin"); // Admin or Manager should be redirected to Home
-            } else {
-              navigate("/serviceadvisor"); // Other users should be redirected to Employee Dashboard
-            }
+            } else if (userRole === 'Team Leader') {
+              navigate("/teamleader"); // Team Leader should be redirected to Home
+              // Other users should be redirected to Employee Dashboard
+            }else if(userRole === 'Service Advisor'){
+              navigate("/serviceadvisor");
           }
+        }
       }catch(error){
         if (error.response) {
           console.log("Error Response:", error.response);

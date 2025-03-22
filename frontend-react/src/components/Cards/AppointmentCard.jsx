@@ -43,7 +43,7 @@ const AppointmentCard = ({ appointment,recallTable,recallCarousel }) => {
   };
 
   return (
-    <div className="p-7 border-3 border-red-400 rounded-2xl shadow-lg space-y-4 w-1/3 mb-10">
+    <div className="p-7 border-3 border-red-400 rounded-2xl shadow-lg space-y-4 w-full mb-10">
       <h1 className="text-xl font-bold">Appointment</h1>
       <div className="space-y-2">
         <div className="flex items-center space-x-2">

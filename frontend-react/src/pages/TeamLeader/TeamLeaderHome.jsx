@@ -7,8 +7,9 @@ import UserData from '../../components/UserData';
 import axiosInstance from '../../utils/AxiosInstance';
 import { Link, Outlet, useNavigate } from 'react-router-dom';
 
-const ServiceAdvisorHome = () => {
-  const [isOpen, setIsOpen] = useState(true);
+const TeamLeaderHome = () => {
+
+    const [isOpen, setIsOpen] = useState(true);
   const [userInfo, setUserInfo] = useState({}); // Ensure userInfo is initialized properly
   const [error, setError] = useState(null);
   const navigate = useNavigate();
@@ -61,13 +62,12 @@ const ServiceAdvisorHome = () => {
 
   // Sidebar Menu Items (Only Appointments & Job Card)
   const menuItems = [
-    { title: "Appointments", icon: <MdOutlineEventNote size={30} className="text-white font-bold" />, path: "/serviceadvisor/appointments" },
-    { title: "Job Card", icon: <FaClipboardList size={30} className="text-white font-bold" />, path: "/serviceadvisor/jobcards" },
+    { title: "Appointments", icon: <MdOutlineEventNote size={30} className="text-white font-bold" />, path: "/teamleader/assign" },
+    { title: "Job Card", icon: <FaClipboardList size={30} className="text-white font-bold" />, path: "/teamleader/jobcards-leader" },
   ];
-
   return (
     <>
-      <div className="flex min-h-screen overflow-hidden">
+      <div className="flex min-h-screen">
         {/* Sidebar */}
         <div
           className={`${
@@ -141,7 +141,7 @@ const ServiceAdvisorHome = () => {
         </div>
       </div>
     </>
-  );
-};
+  )
+}
 
-export default ServiceAdvisorHome;
+export default TeamLeaderHome

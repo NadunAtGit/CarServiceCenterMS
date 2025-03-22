@@ -7,22 +7,28 @@ import AdminCustomers from './pages/Admin/AdminCustomers';
 import AdminDashboard from './pages/Admin/AdminDashboard';
 import AdminReports from './pages/Admin/AdminReports';
 import AdminEmployees from './pages/Admin/AdminEmployees';
+import EmployeeDashBoard from './pages/EmployeeDashboard';
 
 import ServiceAdvisorHome from './pages/ServiceAdvisor/ServiceAdvisorHome';
 import ServiceAdvisorAppointments from './pages/ServiceAdvisor/ServiceAdvisorAppointments';
 import ServiceAdvisorJobCards from './pages/ServiceAdvisor/ServiceAdvisorJobCards';
 
+import TeamLeaderHome from './pages/TeamLeader/TeamLeaderHome';
+import TeamLeaderAssign from './pages/TeamLeader/TeamLeaderAssign';
+import TeamLeaderJobCards from './pages/TeamLeader/TeamLeaderJobCards';
+
 import {jwtDecode} from 'jwt-decode';
 
 const App = () => {
   return (
-    <div >
+    <div>
       <Routes>
           {/* Redirect to login if no valid route */}
           <Route path="*" element={<Navigate to="/login" />} />
 
           {/* Login route */}
           <Route path='/login' element={<Login />} />
+          
 
           {/* Admin routes */}
           <Route 
@@ -42,17 +48,32 @@ const App = () => {
           </Route>
 
           {/* Service Advisor routes */}
-          <Route 
-            path='/serviceadvisor' 
-            element={
-              <PrivateRoute roles={['Service Advisor']}>
-                <ServiceAdvisorHome />
-              </PrivateRoute>
-            }
-          >
+        <Route 
+              path='/serviceadvisor' 
+              element={
+                <PrivateRoute roles={['Service Advisor']}>
+                  <ServiceAdvisorHome />
+                </PrivateRoute>
+              }
+    >
               <Route index element={<ServiceAdvisorJobCards />} />
               <Route path="appointments" element={<ServiceAdvisorAppointments />} />
               <Route path="jobcards" element={<ServiceAdvisorJobCards />} />
+        </Route>
+
+
+          {/* Team Leader routes */}
+          <Route 
+            path='/teamleader' 
+            element={
+              <PrivateRoute roles={['Team Leader']}>
+                <TeamLeaderHome />
+              </PrivateRoute>
+            }
+          >
+                <Route index element={<TeamLeaderJobCards />} />
+                <Route path="assign" element={<TeamLeaderAssign />} />
+                <Route path="jobcards-leader" element={<TeamLeaderJobCards />} />
           </Route>
 
       </Routes>
@@ -64,25 +85,33 @@ const App = () => {
 const PrivateRoute = ({ roles, children }) => {
   const token = localStorage.getItem("token");
 
-  // If no token, redirect to login
   if (!token) {
+    console.log("🚨 No token found. Redirecting to login.");
     return <Navigate to="/login" />;
   }
 
-  // Decode the token to get the role
   let role;
   try {
     const decodedToken = jwtDecode(token);
-    role = decodedToken.role; // Extract role from the token
+    role = decodedToken.role;
+    console.log("✅ Decoded Role:", role); 
+    console.log("Decoded Token: ", decodedToken);
+console.log("Decoded Role: ", decodedToken.role);
+
+    // Debugging
   } catch (e) {
+    console.log("🚨 Invalid token. Redirecting to login.");
     return <Navigate to="/login" />;
   }
 
-  // If user role is not in the allowed roles, redirect to login
+  console.log(`🔍 Checking if '${role}' exists in`, roles);
+
   if (!roles.includes(role)) {
+    console.log(`🚫 Access Denied: '${role}' does not match any of`, roles);
     return <Navigate to="/login" />;
   }
 
+  console.log(`✅ Access Granted for: '${role}'`);
   return children;
 };
 

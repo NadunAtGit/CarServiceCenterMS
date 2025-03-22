@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FiMenu, FiLogOut } from 'react-icons/fi';
-import { FaUserCircle, FaUserTie, FaRegAddressCard, FaClipboardList } from 'react-icons/fa';
+import { FaUserCircle, FaUserTie, FaRegAddressCard, FaClipboardList,FaPaperPlane } from 'react-icons/fa';
 import { MdSpaceDashboard, MdOutlineEventNote } from 'react-icons/md';
 import { Link, Outlet, useNavigate } from 'react-router-dom';
 import UserData from '../../components/UserData';
@@ -97,6 +97,17 @@ const AdminHome = () => {
             </div>
           )}
 
+          {isOpen &&(
+                      <div className="flex justify-center items-center mb-2">
+                          <Link to={'/employee-dashboard'} className="text-decoration-none">
+                            <button className="bg-white/10 text-white px-4 py-2 rounded-full flex items-center gap-2 backdrop-blur-md transition-transform transform hover:scale-95 focus:outline-none">
+                              <FaPaperPlane className="text-xl" />
+                              Your Dashboard
+                            </button>
+                          </Link>
+                      </div>
+          
+          )}
           {/* Menu Items */}
           <nav className="mt-1">
             {menuItems.map((item, index) => (

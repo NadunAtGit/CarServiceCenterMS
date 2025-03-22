@@ -21,7 +21,7 @@ const AddJobCard = ({ onClose, getJobCards, appointmentId }) => {
     setLoading(true);
 
     try {
-      const response = await axiosInstance.post(`/api/teamleader/create-jobcard/${appointmentId}`, {
+      const response = await axiosInstance.post(`/api/advisor/create-jobcard/${appointmentId}`, {
         ServiceDetails: serviceDetails,
         Type: type,
       });
