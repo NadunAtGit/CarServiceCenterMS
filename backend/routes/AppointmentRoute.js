@@ -317,7 +317,15 @@ router.get("/today", authenticateToken, authorizeRoles(["Service Advisor", "Admi
 
         console.log("Server Local Date:", today); // Debugging log
 
-        const query = "SELECT * FROM Appointments WHERE Date = ?";
+        // SQL query to get appointments for today that are confirmed and don't have a job card yet
+        const query = `
+            SELECT a.* 
+            FROM Appointments a
+            LEFT JOIN JobCards j ON a.AppointmentID = j.AppointmentID
+            WHERE a.Date = ? 
+            AND a.Status = 'Confirmed' 
+            AND j.AppointmentID IS NULL;
+        `;
 
         db.query(query, [today], (err, results) => {
             if (err) {
@@ -326,7 +334,7 @@ router.get("/today", authenticateToken, authorizeRoles(["Service Advisor", "Admi
             }
 
             if (!results || results.length === 0) {
-                return res.status(404).json({ success: false, message: "No appointments found for today." });
+                return res.status(404).json({ success: false, message: "No appointments found for today without a job card." });
             }
 
             return res.status(200).json({ success: true, appointments: results });
@@ -337,6 +345,7 @@ router.get("/today", authenticateToken, authorizeRoles(["Service Advisor", "Admi
         return res.status(500).json({ error: true, message: "Unexpected server error. Please try again later." });
     }
 });
+
 
 
 

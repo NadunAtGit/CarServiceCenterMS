@@ -36,24 +36,38 @@ router.post("/create-jobcard/:appointmentId", authenticateToken, authorizeRoles(
                 return res.status(404).json({ error: true, message: "Appointment not found" });
             }
 
-            // Generate JobCardID (e.g., JC-0001, JC-0002, etc.)
-            const jobCardID = await generateJobCardId(); // You would need a function like generateJobCardId
-
-            // Insert into JobCards table
-            const insertQuery = `INSERT INTO JobCards (JobCardID, ServiceDetails, Type, AppointmentID)
-                                 VALUES (?, ?, ?, ?)`;
-
-            db.query(insertQuery, [jobCardID, ServiceDetails, Type, appointmentId], (insertErr, insertResult) => {
-                if (insertErr) {
-                    console.error("Error inserting JobCard:", insertErr);
-                    return res.status(500).json({ error: true, message: "Internal server error" });
+            // Check if a JobCard already exists for this appointment
+            const checkJobCardQuery = "SELECT * FROM JobCards WHERE AppointmentID = ?";
+            db.query(checkJobCardQuery, [appointmentId], async (jobCardErr, jobCardResult) => {
+                if (jobCardErr) {
+                    console.error("Error checking JobCard:", jobCardErr);
+                    return res.status(500).json({ error: true, message: "Database error while checking job card" });
                 }
 
-                // Successfully created job card
-                return res.status(200).json({
-                    success: true,
-                    message: "Job Card created successfully",
-                    jobCardID,
+                // If a JobCard already exists for this appointment
+                if (jobCardResult.length > 0) {
+                    return res.status(400).json({ error: true, message: "Job Card already created for this appointment" });
+                }
+
+                // Generate JobCardID (e.g., JC-0001, JC-0002, etc.)
+                const jobCardID = await generateJobCardId(); // You would need a function like generateJobCardId
+
+                // Insert into JobCards table
+                const insertQuery = `INSERT INTO JobCards (JobCardID, ServiceDetails, Type, AppointmentID)
+                                     VALUES (?, ?, ?, ?)`;
+
+                db.query(insertQuery, [jobCardID, ServiceDetails, Type, appointmentId], (insertErr, insertResult) => {
+                    if (insertErr) {
+                        console.error("Error inserting JobCard:", insertErr);
+                        return res.status(500).json({ error: true, message: "Internal server error" });
+                    }
+
+                    // Successfully created job card
+                    return res.status(200).json({
+                        success: true,
+                        message: "Job Card created successfully",
+                        jobCardID,
+                    });
                 });
             });
         });
@@ -62,6 +76,7 @@ router.post("/create-jobcard/:appointmentId", authenticateToken, authorizeRoles(
         return res.status(500).json({ error: true, message: "Server error" });
     }
 });
+
 
 // router.get("/jobcards", authenticateToken, async (req, res) => {
 //     try {

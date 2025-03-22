@@ -59,6 +59,7 @@ const CreateJobCard = ({ appointment, recallTable, recallCarousel }) => {
           onClose={closeModal}
           getJobCards={recallTable}
           appointmentId={appointment.AppointmentID}
+          recallCarousel={recallCarousel}
         />
       </Modal>
     </div>

@@ -110,16 +110,17 @@ const generateJobCardId = async () => {
                 newId = "JC-0001"; // First JobCard
             } else {
                 let lastId = result[0].JobCardID; // Example: "JC-0009"
-                let lastNum = parseInt(lastId.split("-")[1], 10) || 0; // Ensure it's a number
+                let lastNum = parseInt(lastId.split("-")[1], 10) || 0; // Extract numeric part
                 let nextNum = lastNum + 1;
 
-                // Resetting after reaching 9999
+                // Prevent overflow beyond "JC-9999"
                 if (nextNum > 9999) {
-                    nextNum = 1; // Reset to JC-00001
+                    console.error("JobCardID limit reached! Consider a new format.");
+                    return reject(new Error("JobCardID limit reached!"));
                 }
 
-                // Format as "JC-0001", "JC-0002", ..., "JC-9999", "JC-00001"
-                newId = `JC-${nextNum.toString().padStart(5, "0")}`; // Format with 5 digits
+                // Format as "JC-0001", "JC-0002", ..., "JC-9999"
+                newId = `JC-${nextNum.toString().padStart(4, "0")}`;
             }
             resolve(newId);
         });

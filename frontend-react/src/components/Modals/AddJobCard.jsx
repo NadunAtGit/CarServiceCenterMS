@@ -5,7 +5,7 @@ import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { CircularProgress } from "@mui/material";
 
-const AddJobCard = ({ onClose, getJobCards, appointmentId }) => {
+const AddJobCard = ({ onClose, getJobCards, appointmentId ,getAppointments}) => {
   const [serviceDetails, setServiceDetails] = useState("");
   const [type, setType] = useState("");
   const [error, setError] = useState("");

@@ -61,7 +61,7 @@ const ServiceAdvisorJobCards = () => {
   }, []);
 
   const settings = {
-    dots: true,
+    dots: todayAppointments.length > 1, // Show dots only if there is more than 1 appointment
     infinite: todayAppointments.length > 1, // Enable infinite scroll if more than one appointment
     speed: 500,
     slidesToShow: Math.min(todayAppointments.length, 3), // Show up to 3 slides
@@ -84,7 +84,25 @@ const ServiceAdvisorJobCards = () => {
         },
       },
     ],
+    prevArrow: (
+      <button
+        type="button"
+        className="slick-prev absolute top-1/2 left-4 transform -translate-y-1/2 text-white bg-gray-800 rounded-full p-2 z-10"
+      >
+        {"<"} {/* Customize with an icon or text */}
+      </button>
+    ),
+    nextArrow: (
+      <button
+        type="button"
+        className="slick-next absolute top-1/2 right-4 transform -translate-y-1/2 text-white bg-gray-800 rounded-full p-2 z-10"
+      >
+        {">"} {/* Customize with an icon or text */}
+      </button>
+    ),
   };
+  
+  
 
   return (
     <>
@@ -97,15 +115,16 @@ const ServiceAdvisorJobCards = () => {
           ) : todayAppointments.length === 0 ? (
             <p className="text-xl font-bold mb-3 text-center">No appointments for today.</p>
           ) : (
-            <div className="flex  w-full mx-auto mr-20">
-              <Slider {...settings} className="mb-10 w-4/5">
-                {todayAppointments.map((appointment) => (
-                  <div key={appointment.AppointmentID} className="px-2">
-                    <CreateJobCard appointment={appointment} recallCarousel={getTodayAppointments} recallTable={getJobCards} />
-                  </div>
-                ))}
-              </Slider>
+            <div className="relative flex w-full justify-center mx-auto">
+                            <Slider {...settings} className="mb-10 max-w-4xl w-full">
+                              {todayAppointments.map((appointment) => (
+                                <div key={appointment.AppointmentID} className="px-2">
+                                  <CreateJobCard appointment={appointment} recallCarousel={getTodayAppointments} recallTable={getJobCards}/>
+                                </div>
+                              ))}
+                            </Slider>
             </div>
+
           )}
 
           <div className="w-full flex flex-row gap-3 my-5">
@@ -126,8 +145,8 @@ const ServiceAdvisorJobCards = () => {
             </button>
           </div>
 
-          <div className="overflow-x-scroll md:overflow-x-auto">
-                  <table className="max-w-full bg-white rounded-lg shadow-lg">
+          <div className=" flexoverflow-x-scroll md:overflow-x-auto">
+                  <table className="max-w-6xl w-full bg-white rounded-lg shadow-lg justify-center">
                   <thead>
               <tr className="bg-[#5b7ad2] text-white">
                 <th className="py-3 px-4 text-left">JobCardID ID</th>
