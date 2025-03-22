@@ -14,6 +14,7 @@ router.use((req, res, next) => {
     next();
 });
 
+
 router.get("/present-employees", authenticateToken, authorizeRoles(["Team Leader", "Admin"]), async (req, res) => {
     try {
         const todayDate = moment().format("YYYY-MM-DD"); // Get today's date
@@ -43,6 +44,41 @@ router.get("/present-employees", authenticateToken, authorizeRoles(["Team Leader
         return res.status(500).json({ error: true, message: "Server error" });
     }
 });
+
+router.get("/notworking-employees", authenticateToken, authorizeRoles(["Team Leader"]), async (req, res) => {
+    try {
+        const todayDate = moment().format("YYYY-MM-DD"); // Get today's date
+
+        const query = `
+            SELECT Employees.EmployeeID, Employees.Name, Employees.Email, Employees.Role, 
+                   Attendances.Date, Attendances.Status, Attendances.ArrivalTime, Attendances.isWorking
+            FROM Attendances
+            JOIN Employees ON Attendances.EmployeeID = Employees.EmployeeID
+            WHERE Attendances.Date = ? 
+              AND Attendances.Status = 'Present' 
+              AND Employees.Role = 'Mechanic'
+              AND Attendances.isWorking = FALSE;
+        `;
+
+        const notWorkingMechanics = await new Promise((resolve, reject) => {
+            db.query(query, [todayDate], (err, result) => {
+                if (err) return reject(err);
+                resolve(result);
+            });
+        });
+
+        return res.status(200).json({
+            error: false,
+            message: "Not working mechanics fetched successfully",
+            employees: notWorkingMechanics
+        });
+
+    } catch (error) {
+        console.error("Error fetching not working mechanics:", error);
+        return res.status(500).json({ error: true, message: "Server error" });
+    }
+});
+
 
 
 

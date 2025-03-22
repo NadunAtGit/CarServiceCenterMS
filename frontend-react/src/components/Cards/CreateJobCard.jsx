@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState,useEffect } from "react";
 import { FaCalendarAlt, FaClock, FaUser, FaCar } from "react-icons/fa";
 import Modal from "react-modal";
 import AddJobCard from "../Modals/AddJobCard";
@@ -13,6 +13,8 @@ const CreateJobCard = ({ appointment, recallTable, recallCarousel }) => {
   const closeModal = () => {
     setIsModalOpen(false);
   };
+
+    
 
   return (
     <div className="p-7 border-3 border-red-400 rounded-2xl shadow-lg space-y-4 w-full mb-10">

@@ -40,68 +40,81 @@ const ServiceAdvisorJobCards = () => {
     setIsLoading(false);
   };
 
+  // const getTodayAppointments = async () => {
+  //   setIsLoading(true);
+  //   try {
+  //     const response = await axiosInstance.get("api/appointments/today");
+  //     if (response.data.success) {
+  //       setTodayAppointments(response.data.appointments);
+  //     } else {
+  //       console.error("Failed to fetch today's appointments:", response.data.message);
+  //     }
+  //   } catch (error) {
+  //     console.error("Error fetching today's appointments:", error);
+  //   }
+  //   setIsLoading(false);
+  // };
+
   const getTodayAppointments = async () => {
     setIsLoading(true);
     try {
       const response = await axiosInstance.get("api/appointments/today");
       if (response.data.success) {
-        setTodayAppointments(response.data.appointments);
-      } else {
-        console.error("Failed to fetch today's appointments:", response.data.message);
+        setTodayAppointments(response.data.appointments); // This will update the state and re-render the carousel
       }
     } catch (error) {
-      console.error("Error fetching today's appointments:", error);
+      console.error("Error fetching appointments:", error);
     }
     setIsLoading(false);
   };
-
+  
   useEffect(() => {
     getJobCards();
     getTodayAppointments();
   }, []);
 
   const settings = {
-    dots: todayAppointments.length > 1, // Show dots only if there is more than 1 appointment
-    infinite: todayAppointments.length > 1, // Enable infinite scroll if more than one appointment
-    speed: 500,
-    slidesToShow: Math.min(todayAppointments.length, 3), // Show up to 3 slides
-    slidesToScroll: 1,
-    autoplay: true,
-    autoplaySpeed: 3000,
-    centerMode: true, // Center the active slide
-    centerPadding: "0px", // Ensure full-width centering
-    responsive: [
-      {
-        breakpoint: 1024,
-        settings: {
-          slidesToShow: Math.min(todayAppointments.length, 2),
-        },
+  dots: todayAppointments.length > 1, // Show dots only if there is more than 1 appointment
+  infinite: todayAppointments.length > 1, // Enable infinite scroll if more than one appointment
+  speed: 500,
+  slidesToShow: Math.min(todayAppointments.length, 3), // Show up to 3 slides
+  slidesToScroll: 1,
+  autoplay: true,
+  autoplaySpeed: 3000,
+  centerMode: true, // Center the active slide
+  centerPadding: "0px", // Ensure full-width centering
+  responsive: [
+    {
+      breakpoint: 1024,
+      settings: {
+        slidesToShow: Math.min(todayAppointments.length, 2),
       },
-      {
-        breakpoint: 768,
-        settings: {
-          slidesToShow: 1,
-        },
+    },
+    {
+      breakpoint: 768,
+      settings: {
+        slidesToShow: 1,
       },
-    ],
-    prevArrow: (
-      <button
-        type="button"
-        className="slick-prev absolute top-1/2 left-4 transform -translate-y-1/2 text-white bg-gray-800 rounded-full p-2 z-10"
-      >
-        {"<"} {/* Customize with an icon or text */}
-      </button>
-    ),
-    nextArrow: (
-      <button
-        type="button"
-        className="slick-next absolute top-1/2 right-4 transform -translate-y-1/2 text-white bg-gray-800 rounded-full p-2 z-10"
-      >
-        {">"} {/* Customize with an icon or text */}
-      </button>
-    ),
-  };
-  
+    },
+  ],
+  prevArrow: (
+    <button
+      type="button"
+      className="slick-prev absolute top-1/2 left-4 transform -translate-y-1/2 text-white bg-gray-800 rounded-full p-2 z-10"
+    >
+      {"<"} {/* Customize with an icon or text */}
+    </button>
+  ),
+  nextArrow: (
+    <button
+      type="button"
+      className="slick-next absolute top-1/2 right-4 transform -translate-y-1/2 text-white bg-gray-800 rounded-full p-2 z-10"
+    >
+      {">"} {/* Customize with an icon or text */}
+    </button>
+  ),
+};
+
   
 
   return (
@@ -119,7 +132,7 @@ const ServiceAdvisorJobCards = () => {
                             <Slider {...settings} className="mb-10 max-w-4xl w-full">
                               {todayAppointments.map((appointment) => (
                                 <div key={appointment.AppointmentID} className="px-2">
-                                  <CreateJobCard appointment={appointment} recallCarousel={getTodayAppointments} recallTable={getJobCards}/>
+                                  <CreateJobCard appointment={appointment} recallCarousel={getTodayAppointments} recallTable={getJobCards} />
                                 </div>
                               ))}
                             </Slider>

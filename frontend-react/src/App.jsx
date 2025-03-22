@@ -17,6 +17,8 @@ import TeamLeaderHome from './pages/TeamLeader/TeamLeaderHome';
 import TeamLeaderAssign from './pages/TeamLeader/TeamLeaderAssign';
 import TeamLeaderJobCards from './pages/TeamLeader/TeamLeaderJobCards';
 
+import MechanicHome from './pages/Mechanic/MechanicHome';
+import MechanicDashboard from './pages/Mechanic/MechanicDashboard';
 import {jwtDecode} from 'jwt-decode';
 
 const App = () => {
@@ -25,6 +27,7 @@ const App = () => {
       <Routes>
           {/* Redirect to login if no valid route */}
           <Route path="*" element={<Navigate to="/login" />} />
+          <Route path="employee-dashboard" element={<EmployeeDashBoard />} />
 
           {/* Login route */}
           <Route path='/login' element={<Login />} />
@@ -40,8 +43,10 @@ const App = () => {
             }
           >
               <Route index element={<AdminDashboard />} />
+              
               <Route path="dashboard" element={<AdminDashboard />} />
               <Route path="employees" element={<AdminEmployees />} />
+              
               <Route path="appointments" element={<AdminAppointments />} />
               <Route path="customers" element={<AdminCustomers />} />
               <Route path="reports" element={<AdminReports />} />
@@ -74,6 +79,19 @@ const App = () => {
                 <Route index element={<TeamLeaderJobCards />} />
                 <Route path="assign" element={<TeamLeaderAssign />} />
                 <Route path="jobcards-leader" element={<TeamLeaderJobCards />} />
+          </Route>
+
+          <Route 
+            path='/mechanic' 
+            element={
+              <PrivateRoute roles={['Mechanic']}>
+                <MechanicHome />
+              </PrivateRoute>
+            }
+          >
+                <Route index element={<MechanicDashboard />} />
+                <Route path="dashboard" element={<MechanicDashboard />} />
+                
           </Route>
 
       </Routes>

@@ -62,8 +62,8 @@ const TeamLeaderHome = () => {
 
   // Sidebar Menu Items (Only Appointments & Job Card)
   const menuItems = [
-    { title: "Appointments", icon: <MdOutlineEventNote size={30} className="text-white font-bold" />, path: "/teamleader/assign" },
-    { title: "Job Card", icon: <FaClipboardList size={30} className="text-white font-bold" />, path: "/teamleader/jobcards-leader" },
+    { title: "Assign", icon: <MdOutlineEventNote size={30} className="text-white font-bold" />, path: "/teamleader/assign" },
+    { title: "Job Cards", icon: <FaClipboardList size={30} className="text-white font-bold" />, path: "/teamleader/jobcards-leader" },
   ];
   return (
     <>

@@ -5,7 +5,7 @@ import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { CircularProgress } from "@mui/material";
 
-const AddJobCard = ({ onClose, getJobCards, appointmentId ,getAppointments}) => {
+const AddJobCard = ({ onClose, getJobCards, appointmentId, getAppointments,recallCarousel }) => {
   const [serviceDetails, setServiceDetails] = useState("");
   const [type, setType] = useState("");
   const [error, setError] = useState("");
@@ -29,7 +29,8 @@ const AddJobCard = ({ onClose, getJobCards, appointmentId ,getAppointments}) => 
       if (response.data.success) {
         toast.success("Job Card created successfully!");
         getJobCards(); // Refresh job cards list
-        onClose();
+        getAppointments(); // Refresh appointments list
+        onClose(); // Close the modal
       }
     } catch (error) {
       console.error("Error creating job card:", error);
@@ -39,7 +40,10 @@ const AddJobCard = ({ onClose, getJobCards, appointmentId ,getAppointments}) => 
       setLoading(false);
     }
   };
-
+  const handleClick = () => {
+    handleSubmit();
+    recallCarousel();
+  }
   return (
     <div className="relative mx-auto bg-white rounded-lg p-6 max-w-xl shadow-lg top-40">
       <button
@@ -78,7 +82,7 @@ const AddJobCard = ({ onClose, getJobCards, appointmentId ,getAppointments}) => 
 
         <button
           className="bg-red-500 text-white py-2 px-6 rounded-lg hover:bg-red-300"
-          onClick={handleSubmit}
+          onClick={handleClick}
           disabled={loading}
         >
           {loading ? <CircularProgress size={24} color="inherit" /> : "Create Job Card"}

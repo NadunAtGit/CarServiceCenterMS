@@ -53,6 +53,10 @@ const Login = () => {
             }else if(userRole === 'Service Advisor'){
               navigate("/serviceadvisor");
           }
+          else if(userRole === 'Mechanic'){
+            navigate("/mechanic");
+
+          }
         }
       }catch(error){
         if (error.response) {
