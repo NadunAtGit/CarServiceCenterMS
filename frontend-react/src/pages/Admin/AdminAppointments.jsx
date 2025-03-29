@@ -102,10 +102,10 @@ const AdminAppointments = () => {
     infinite: notConfirmed.length > 1,
     speed: 500,
     slidesToShow: Math.min(notConfirmed.length, 3),
-    slidesToScroll: 3,
+    slidesToScroll: 1,
     autoplay: true,
     autoplaySpeed: 3000,
-    dotsClass: "slick-dots custom-dots", // Custom class for dots
+    dotsClass: "slick-dots custom-dots", 
     centerMode: true,
     centerPadding: "0px",
     responsive: [
@@ -113,26 +113,28 @@ const AdminAppointments = () => {
         breakpoint: 1024,
         settings: {
           slidesToShow: Math.min(notConfirmed.length, 2),
+          slidesToScroll: 1,
         },
       },
       {
         breakpoint: 768,
         settings: {
           slidesToShow: 1,
+          slidesToScroll: 1,
         },
       },
     ],
   };
 
   return (
-    <div className="container mx-auto px-4 py-6 bg-gray-900 min-h-screen">
+    <div className="container mx-auto px-4 py-6 bg-[#D8D8D8] min-h-screen">
       <div className="w-full">
-        <h1 className="text-2xl font-bold mb-6 text-gray-100">Unapproved Appointments</h1>
+        <h1 className="text-2xl font-bold mb-6 text-gray-800">Unapproved Appointments</h1>
 
         {isLoading ? (
-          <p className="text-gray-400 text-center">Loading appointments...</p>
+          <p className="text-gray-600 text-center">Loading appointments...</p>
         ) : notConfirmed.length === 0 ? (
-          <p className="text-xl font-bold mb-3 text-center text-gray-400">
+          <p className="text-xl font-bold mb-3 text-center text-gray-600">
             No unconfirmed appointments available.
           </p>
         ) : (
@@ -142,7 +144,7 @@ const AdminAppointments = () => {
               className="w-full md:w-4/5 custom-slider"
             >
               {notConfirmed.map((appointment) => (
-                <div key={appointment.AppointmentID} className="px-2">
+                <div key={appointment.AppointmentID} className="px-3 py-2">
                   <AppointmentCard 
                     appointment={appointment} 
                     recallCarousel={fetchNotConfirmed} 
@@ -161,14 +163,14 @@ const AdminAppointments = () => {
               <input
                 type="text"
                 placeholder="Search by appointment ID, customer ID, or date"
-                className="w-full bg-gray-800/50 text-gray-100 outline-none border border-gray-700/50 py-2 px-4 rounded-lg backdrop-blur-xl focus:ring-2 focus:ring-blue-500/50 transition-all duration-300"
+                className="w-full bg-white/70 text-gray-800 outline-none border border-[#944EF8]/20 py-2 px-4 rounded-lg backdrop-blur-xl focus:ring-2 focus:ring-[#944EF8]/30 transition-all duration-300"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
               <FiSearch className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
             </div>
             <button
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600/50 text-white border border-blue-500/30 backdrop-blur-xl hover:bg-blue-700/50 transition-all duration-300"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-[#944EF8]/80 to-[#944EF8]/60 text-white border border-[#944EF8]/30 backdrop-blur-xl hover:from-[#944EF8]/90 hover:to-[#944EF8]/70 transition-all duration-300 shadow-md"
               onClick={searchAppointments}
             >
               <FiSearch size={22} />
@@ -177,13 +179,13 @@ const AdminAppointments = () => {
           </div>
         </div>
 
-        <h1 className="text-2xl font-bold mb-6 text-gray-100">Appointment Data</h1>
+        <h1 className="text-2xl font-bold mb-6 text-gray-800">Appointment Data</h1>
 
         {/* Appointments Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full bg-gray-800/50 rounded-lg backdrop-blur-xl border border-gray-700/30 shadow-2xl">
+        <div className="overflow-x-auto rounded-xl shadow-lg">
+          <table className="w-full bg-white/70 rounded-lg backdrop-blur-xl border border-[#944EF8]/10 shadow-md">
             <thead>
-              <tr className="bg-gray-700/50 text-gray-200">
+              <tr className="bg-[#944EF8]/10 text-gray-800">
                 <th className="py-3 px-4 text-left hidden md:table-cell">Appointment ID</th>
                 <th className="py-3 px-4 text-left">Customer ID</th>
                 <th className="py-3 px-4 text-left hidden md:table-cell">Vehicle</th>
@@ -197,24 +199,24 @@ const AdminAppointments = () => {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan="8" className="text-center py-4 text-gray-400">Loading...</td>
+                  <td colSpan="8" className="text-center py-4 text-gray-500">Loading...</td>
                 </tr>
               ) : appointments.length > 0 ? (
                 appointments.map((appointment) => (
                   <tr 
                     key={appointment.AppointmentID} 
-                    className="border-b border-gray-700/30 hover:bg-gray-700/20 transition-colors"
+                    className="border-b border-[#944EF8]/10 hover:bg-[#944EF8]/5 transition-colors"
                   >
-                    <td className="py-3 px-4 hidden md:table-cell text-gray-300">{appointment.AppointmentID}</td>
-                    <td className="py-3 px-4 text-gray-100">{appointment.CustomerID}</td>
-                    <td className="py-3 px-4 hidden md:table-cell text-gray-300">{appointment.VehicleID}</td>
-                    <td className="py-3 px-4 text-gray-300">{appointment.Date}</td>
-                    <td className="py-3 px-4 hidden md:table-cell text-gray-300">{appointment.Time}</td>
-                    <td className="py-3 px-4 text-gray-300">{appointment.Status}</td>
-                    <td className="py-3 px-4 hidden md:table-cell text-gray-300">{appointment.AppointmentMadeDate}</td>
+                    <td className="py-3 px-4 hidden md:table-cell text-gray-700">{appointment.AppointmentID}</td>
+                    <td className="py-3 px-4 text-gray-800 font-medium">{appointment.CustomerID}</td>
+                    <td className="py-3 px-4 hidden md:table-cell text-gray-700">{appointment.VehicleID}</td>
+                    <td className="py-3 px-4 text-gray-700">{appointment.Date}</td>
+                    <td className="py-3 px-4 hidden md:table-cell text-gray-700">{appointment.Time}</td>
+                    <td className="py-3 px-4 text-gray-700">{appointment.Status}</td>
+                    <td className="py-3 px-4 hidden md:table-cell text-gray-700">{appointment.AppointmentMadeDate}</td>
                     <td className="py-3 px-4">
                       <button 
-                        className="text-red-400 hover:text-red-500 transition-colors"
+                        className="text-red-500 hover:text-red-600 transition-colors"
                         onClick={() => deleteAppointment(appointment.AppointmentID)}
                       >
                         Delete
@@ -224,7 +226,7 @@ const AdminAppointments = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="8" className="text-center py-4 text-gray-400">
+                  <td colSpan="8" className="text-center py-4 text-gray-500">
                     No appointments found.
                   </td>
                 </tr>
@@ -237,15 +239,19 @@ const AdminAppointments = () => {
       {/* Custom CSS for Slick Carousel */}
       <style jsx global>{`
         .custom-slider .slick-dots {
-          bottom: -25px;
+          bottom: -30px;
         }
         .custom-slider .slick-dots li button:before {
-          color: #4B5563;
+          color: #6B7280;
           opacity: 0.5;
         }
         .custom-slider .slick-dots li.slick-active button:before {
-          color: #3B82F6;
+          color: #944EF8;
           opacity: 1;
+        }
+        .custom-slider .slick-prev:before, 
+        .custom-slider .slick-next:before {
+          color: #944EF8;
         }
       `}</style>
     </div>

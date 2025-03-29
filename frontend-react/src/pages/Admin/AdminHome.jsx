@@ -67,17 +67,17 @@ const AdminHome = () => {
 
   return (
     <>
-      <div className="flex h-screen overflow-hidden bg-gray-900">
+      <div className="flex h-screen overflow-hidden bg-[#D8D8D8]">
         {/* Sidebar */}
         <div
           className={`${
-            isOpen ? 'w-72' : 'w-20'
-          } fixed bg-gradient-to-br from-gray-800/80 via-gray-900/80 to-black/80 min-h-screen h-full p-5 pt-8 relative flex flex-col transition-all duration-200 overflow-hidden backdrop-blur-xl border-r border-gray-700/30 shadow-2xl`}
+            isOpen ? 'w-82' : 'w-25'
+          } fixed bg-gradient-to-br from-white/80 via-white/60 to-white/80 min-h-screen h-full p-5 pt-8 relative flex flex-col transition-all duration-200 overflow-hidden backdrop-blur-xl border-r border-[#944EF8]/20 shadow-lg`}
         >
           {/* Sidebar Toggle Button */}
           <FiMenu
             size={25}
-            className={`text-gray-300 absolute cursor-pointer transition-all duration-300 hover:text-white ${
+            className={`text-[#944EF8] absolute cursor-pointer transition-all duration-300 hover:text-[#7a3fd0] ${
               isOpen ? 'right-5' : 'right-1/2 transform translate-x-1/2'
             }`}
             onClick={toggleSidebar}
@@ -92,14 +92,14 @@ const AdminHome = () => {
             />
           ) : (
             <div className="flex items-center justify-center mt-10">
-              <FaUserCircle size={40} className="text-gray-300" />
+              <FaUserCircle size={40} className="text-[#944EF8]" />
             </div>
           )}
 
           {isOpen && (
             <div className="flex justify-center items-center mb-2">
               <Link to={'/employee-dashboard'} className="text-decoration-none">
-                <button className="bg-gray-700/30 text-gray-200 px-4 py-2 rounded-full flex items-center gap-2 backdrop-blur-md transition-transform transform hover:scale-95 focus:outline-none hover:bg-gray-600/50 border border-gray-600/30 shadow-lg">
+                <button className="bg-gradient-to-r from-[#944EF8]/80 to-[#944EF8]/60 text-white px-4 py-2 rounded-full flex items-center gap-2 backdrop-blur-md transition-all transform hover:scale-95 focus:outline-none hover:from-[#944EF8]/90 hover:to-[#944EF8]/70 border border-[#944EF8]/30 shadow-md">
                   <FaPaperPlane className="text-xl" />
                   Your Dashboard
                 </button>
@@ -112,7 +112,7 @@ const AdminHome = () => {
             {menuItems.map((item, index) => (
               <Link to={item.path} key={index} className="block">
                 <div
-                  className={`flex items-center text-gray-300 p-3 rounded-lg transition-all duration-200 hover:bg-gray-700/50 hover:text-white my-3 border border-transparent hover:border-gray-600/30 ${
+                  className={`flex items-center text-gray-700 p-3 rounded-lg transition-all duration-200 hover:bg-[#944EF8]/10 hover:text-[#944EF8] my-3 border border-transparent hover:border-[#944EF8]/20 ${
                     isOpen ? 'justify-start gap-4' : 'justify-center'
                   }`}
                 >
@@ -126,7 +126,7 @@ const AdminHome = () => {
           {/* Logout Button */}
           <div className="mt-auto">
             <div
-              className={`flex items-center text-gray-300 p-3 rounded-lg cursor-pointer transition-all duration-200 hover:bg-gray-700/50 hover:text-white border border-transparent hover:border-gray-600/30 ${
+              className={`flex items-center text-gray-700 p-3 rounded-lg cursor-pointer transition-all duration-200 hover:bg-[#944EF8]/10 hover:text-[#944EF8] border border-transparent hover:border-[#944EF8]/20 ${
                 isOpen ? 'justify-start gap-4' : 'justify-center'
               }`}
               onClick={onLogout}
@@ -138,9 +138,9 @@ const AdminHome = () => {
         </div>
 
         {/* Main content */}
-        <div className={`flex-grow p-5 ml-${isOpen ? '72' : '20'} transition-all duration-200 h-screen overflow-y-auto w-full bg-gray-900`}>
+        <div className={`flex-grow p-5  transition-all duration-200 h-screen overflow-y-auto w-full bg-[#D8D8D8]`}>
           {error && <p className="text-red-500">{error}</p>}
-          <div className="bg-gray-800/50 rounded-2xl p-6 backdrop-blur-xl border border-gray-700/30 shadow-2xl">
+          <div className="bg-white/70 rounded-2xl p-6 backdrop-blur-xl border border-[#944EF8]/10 shadow-lg ">
             <Outlet />
           </div>
         </div>

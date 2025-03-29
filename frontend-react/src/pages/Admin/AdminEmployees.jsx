@@ -105,9 +105,9 @@ const AdminEmployees = () => {
   });
 
   return (
-    <div className="container mx-auto px-4 py-6 bg-gray-900 min-h-screen">
+    <div className="container mx-auto px-4 py-6 bg-[#D8D8D8] min-h-screen">
       <div className="w-full">
-        <h1 className="text-2xl font-bold mb-6 text-gray-100">Employees Data</h1>
+        <h1 className="text-2xl font-bold mb-6 text-gray-800">Employees Data</h1>
         
         {/* Search and Filter Section */}
         <div className="w-full grid md:grid-cols-3 gap-3 mb-6">
@@ -116,14 +116,14 @@ const AdminEmployees = () => {
               <input
                 type="text"
                 placeholder="Search by username, department, or role"
-                className="w-full bg-gray-800/50 text-gray-100 outline-none border border-gray-700/50 py-2 px-4 rounded-lg backdrop-blur-xl focus:ring-2 focus:ring-blue-500/50 transition-all duration-300"
+                className="w-full bg-white/50 text-gray-800 outline-none border border-[#944EF8]/20 py-2 px-4 rounded-lg backdrop-blur-xl focus:ring-2 focus:ring-[#944EF8]/50 transition-all duration-300 shadow-sm"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
-              <FiSearch className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <FiSearch className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500" />
             </div>
             <button
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600/50 text-white border border-blue-500/30 backdrop-blur-xl hover:bg-blue-700/50 transition-all duration-300 ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-[#944EF8]/80 to-[#944EF8]/60 text-white border border-[#944EF8]/30 backdrop-blur-xl hover:from-[#944EF8]/90 hover:to-[#944EF8]/70 transition-all duration-300 shadow-md ${
                 isLoading ? "opacity-50 cursor-not-allowed" : ""
               }`}
               onClick={searchEmployees}
@@ -136,44 +136,44 @@ const AdminEmployees = () => {
           
           <div>
             <select
-              className="w-full bg-gray-800/50 text-gray-100 border border-gray-700/50 py-2 px-4 rounded-lg backdrop-blur-xl"
+              className="w-full bg-white/50 text-gray-800 border border-[#944EF8]/20 py-2 px-4 rounded-lg backdrop-blur-xl shadow-sm"
               value={selectedRole}
               onChange={(e) => setSelectedRole(e.target.value)}
             >
-              <option value="" className="bg-gray-900">Filter by Role</option>
-              <option value="Mechanics" className="bg-gray-900">Mechanics</option>
-              <option value="Advisors" className="bg-gray-900">Advisors</option>
-              <option value="Admins" className="bg-gray-900">Admins</option>
-              <option value="Team Leaders" className="bg-gray-900">Team Leaders</option>
+              <option value="" className="bg-white">Filter by Role</option>
+              <option value="Mechanics" className="bg-white">Mechanics</option>
+              <option value="Advisors" className="bg-white">Advisors</option>
+              <option value="Admins" className="bg-white">Admins</option>
+              <option value="Team Leaders" className="bg-white">Team Leaders</option>
             </select>
           </div>
         </div>
 
         {/* Employee Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full bg-gray-800/50 rounded-lg backdrop-blur-xl border border-gray-700/30 shadow-2xl">
+        <div className="overflow-x-auto rounded-xl shadow-xl">
+          <table className="w-full bg-white/70 rounded-lg backdrop-blur-xl border border-[#944EF8]/10">
             <thead>
-              <tr className="bg-gray-700/50 text-gray-200">
-                <th className="py-3 px-4 text-left hidden md:table-cell">Employee ID</th>
-                <th className="py-3 px-4 text-left">Name</th>
-                <th className="py-3 px-4 text-left hidden md:table-cell">Phone</th>
-                <th className="py-3 px-4 text-left">Role</th>
-                <th className="py-3 px-4 text-left hidden md:table-cell">Rating</th>
-                <th className="py-3 px-4 text-left">Operations</th>
+              <tr className="bg-[#944EF8]/10 text-gray-700">
+                <th className="py-3 px-4 text-left hidden md:table-cell font-semibold">Employee ID</th>
+                <th className="py-3 px-4 text-left font-semibold">Name</th>
+                <th className="py-3 px-4 text-left hidden md:table-cell font-semibold">Phone</th>
+                <th className="py-3 px-4 text-left font-semibold">Role</th>
+                <th className="py-3 px-4 text-left hidden md:table-cell font-semibold">Rating</th>
+                <th className="py-3 px-4 text-left font-semibold">Operations</th>
               </tr>
             </thead>
             <tbody>
               {filteredEmployees.length > 0 ? (
                 filteredEmployees.map((employee) => (
-                  <tr key={employee.EmployeeID} className="border-b border-gray-700/30 hover:bg-gray-700/20 transition-colors">
-                    <td className="py-3 px-4 hidden md:table-cell text-gray-300">{employee.EmployeeID}</td>
-                    <td className="py-3 px-4 text-gray-100">{employee.Name}</td>
-                    <td className="py-3 px-4 hidden md:table-cell text-gray-300">{employee.Phone}</td>
-                    <td className="py-3 px-4 text-gray-300">{employee.Role}</td>
-                    <td className="py-3 px-4 text-center hidden md:table-cell text-gray-300">{employee.Rating}</td>
+                  <tr key={employee.EmployeeID} className="border-b border-[#944EF8]/10 hover:bg-[#944EF8]/5 transition-colors">
+                    <td className="py-3 px-4 hidden md:table-cell text-gray-700">{employee.EmployeeID}</td>
+                    <td className="py-3 px-4 text-gray-800 font-medium">{employee.Name}</td>
+                    <td className="py-3 px-4 hidden md:table-cell text-gray-700">{employee.Phone}</td>
+                    <td className="py-3 px-4 text-gray-700">{employee.Role}</td>
+                    <td className="py-3 px-4 text-center hidden md:table-cell text-gray-700">{employee.Rating}</td>
                     <td className="py-3 px-4 flex gap-3 items-center">
-                      <AiOutlineInfoCircle className="text-blue-400 cursor-pointer hover:text-blue-500 transition-colors" size={22} />
-                      <FiRefreshCcw className="text-yellow-400 cursor-pointer hover:text-yellow-500 transition-colors" size={22} />
+                      <AiOutlineInfoCircle className="text-[#944EF8] cursor-pointer hover:text-[#7a3dd0] transition-colors" size={22} />
+                      <FiRefreshCcw className="text-amber-500 cursor-pointer hover:text-amber-600 transition-colors" size={22} />
                       <AiOutlineDelete
                         className="text-red-400 cursor-pointer hover:text-red-500 transition-colors"
                         size={22}
@@ -184,7 +184,7 @@ const AdminEmployees = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="7" className="text-center py-4 text-gray-400">
+                  <td colSpan="7" className="text-center py-4 text-gray-500">
                     No employees found.
                   </td>
                 </tr>
@@ -195,11 +195,11 @@ const AdminEmployees = () => {
 
         {/* Add Employee Floating Button */}
         <div 
-          className='fixed bottom-6 right-6 w-14 h-14 md:w-16 md:h-16 bg-blue-600/50 flex items-center justify-center rounded-full shadow-2xl 
-           border border-blue-500/30 backdrop-blur-xl hover:bg-blue-700/50 transition-all duration-300 cursor-pointer z-50'
+          className="fixed bottom-6 right-6 w-14 h-14 md:w-16 md:h-16 bg-gradient-to-r from-[#944EF8] to-[#944EF8]/80 flex items-center justify-center rounded-full 
+           border border-[#944EF8]/30 shadow-lg hover:shadow-xl hover:from-[#944EF8]/90 hover:to-[#944EF8] transition-all duration-300 cursor-pointer z-50"
           onClick={() => setOpenAddModal({ isShown: true, data: null })}
         >
-          <FiPlus size={30} md:size={40} color='white'/>
+          <FiPlus size={30} color="white"/>
         </div>
       </div>
 
@@ -209,7 +209,7 @@ const AdminEmployees = () => {
         onRequestClose={onCloseAdd}
         style={{
           overlay: {
-            backgroundColor: "rgba(0,0,0,0.5)",
+            backgroundColor: "rgba(0,0,0,0.2)",
             zIndex: 999,
             display: 'flex',
             justifyContent: 'center',
@@ -231,7 +231,7 @@ const AdminEmployees = () => {
         }}
         className="focus:outline-none"
       >
-        <div className="bg-gray-800/80 rounded-2xl backdrop-blur-xl border border-gray-700/30 shadow-2xl">
+        <div className="bg-white/90 rounded-2xl backdrop-blur-xl border border-[#944EF8]/20 shadow-2xl">
           <AddEmployee onClose={onCloseAdd} getEmployees={getEmployeeData} />
         </div>
       </Modal>

@@ -45,21 +45,25 @@ const ImageSelector = ({ image, setImage }) => {
 
       {previewUrl ? (
         <div className="relative w-full flex justify-center">
-          <img src={previewUrl} alt="Preview" className="w-30 h-30 object-cover rounded-full shadow-md" />
+          <img 
+            src={previewUrl} 
+            alt="Preview" 
+            className="w-24 h-24 object-cover rounded-full shadow-md border-2 border-[#944EF8]/30"
+          />
           <button
-            className="absolute top-2 right-2 bg-white p-1 rounded-full shadow-md hover:bg-red-500 hover:text-white"
+            className="absolute top-0 right-1/4 bg-white/80 p-1 rounded-full shadow-md hover:bg-red-500 hover:text-white transition-all duration-300 backdrop-blur-sm border border-[#944EF8]/20"
             onClick={handleRemoveImage}
           >
-            <MdOutlineDelete className="text-xl" />
+            <MdOutlineDelete className="text-xl text-red-500 hover:text-white" />
           </button>
         </div>
       ) : (
         <button
-          className="flex flex-col items-center gap-2 p-4 border-dashed border-2 border-red-500 rounded-full hover:bg-cyan-50 w-30 h-30"
+          className="flex flex-col items-center justify-center gap-2 p-4 border-dashed border-2 border-[#944EF8] rounded-full hover:bg-[#944EF8]/5 w-24 h-24 transition-all duration-300 backdrop-blur-sm bg-white/50"
           onClick={onChooseFile}
         >
-          <FaRegFileImage className="text-3xl text-red-500" />
-          <p className="text-sm text-slate-500">Browse image files to upload</p>
+          <FaRegFileImage className="text-3xl text-[#944EF8]" />
+          <p className="text-xs text-gray-600">Upload image</p>
         </button>
       )}
     </div>

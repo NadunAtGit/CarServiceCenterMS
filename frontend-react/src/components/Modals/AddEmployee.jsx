@@ -70,21 +70,25 @@ const AddEmployee = ({ onClose, getEmployees }) => {
       setError("Error creating employee, please try again.");
       toast.error("Error creating employee, please try again.");
       console.error("Error details:", error.response || error); // Log the full error
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="relative mx-auto bg-[#1e1e2f] rounded-lg p-6 max-w-xl shadow-lg top-10 backdrop-blur-lg bg-opacity-50">
+    <div className="relative mx-auto bg-white/90 rounded-lg p-6 max-w-xl shadow-lg backdrop-blur-lg border border-[#944EF8]/20">
       <button
-        className="absolute top-2 right-2 rounded-full bg-teal-600 p-1 hover:bg-teal-700"
+        className="absolute top-2 right-2 rounded-full bg-gradient-to-r from-[#944EF8] to-[#944EF8]/80 p-1 hover:from-[#944EF8]/90 hover:to-[#944EF8] transition-all duration-300 shadow-md"
         onClick={onClose}
       >
         <MdClose className="text-white" size={25} />
       </button>
 
       <div className="flex items-center flex-col gap-4 mb-6">
-        <h1 className="text-xl font-bold text-teal-400">Create Employee</h1>
-        <ImageSelector setImage={setProfilePic} image={profilePic} />
+        <h1 className="text-xl font-bold text-gray-800">Create Employee</h1>
+        <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-[#944EF8]/30 shadow-md">
+          <ImageSelector setImage={setProfilePic} image={profilePic} />
+        </div>
       </div>
 
       {error && <p className="text-red-500 text-sm mb-2">{error}</p>}
@@ -92,7 +96,7 @@ const AddEmployee = ({ onClose, getEmployees }) => {
       <div className="flex flex-col gap-4">
         <input
           type="text"
-          className="text-md text-white border-2 p-2 rounded-xl border-teal-500 bg-transparent placeholder-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-300"
+          className="text-md text-gray-800 border p-2 rounded-xl border-[#944EF8]/30 bg-white/50 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#944EF8]/50 backdrop-blur-xl transition-all duration-300"
           placeholder="Name"
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -100,7 +104,7 @@ const AddEmployee = ({ onClose, getEmployees }) => {
 
         <input
           type="text"
-          className="text-md text-white border-2 p-2 rounded-xl border-teal-500 bg-transparent placeholder-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-300"
+          className="text-md text-gray-800 border p-2 rounded-xl border-[#944EF8]/30 bg-white/50 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#944EF8]/50 backdrop-blur-xl transition-all duration-300"
           placeholder="Username"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
@@ -108,7 +112,7 @@ const AddEmployee = ({ onClose, getEmployees }) => {
 
         <input
           type="email"
-          className="text-md text-white border-2 p-2 rounded-xl border-teal-500 bg-transparent placeholder-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-300"
+          className="text-md text-gray-800 border p-2 rounded-xl border-[#944EF8]/30 bg-white/50 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#944EF8]/50 backdrop-blur-xl transition-all duration-300"
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -116,7 +120,7 @@ const AddEmployee = ({ onClose, getEmployees }) => {
 
         <input
           type="password"
-          className="text-md text-white border-2 p-2 rounded-xl border-teal-500 bg-transparent placeholder-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-300"
+          className="text-md text-gray-800 border p-2 rounded-xl border-[#944EF8]/30 bg-white/50 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#944EF8]/50 backdrop-blur-xl transition-all duration-300"
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
@@ -124,28 +128,28 @@ const AddEmployee = ({ onClose, getEmployees }) => {
 
         <input
           type="text"
-          className="text-md text-white border-2 p-2 rounded-xl border-teal-500 bg-transparent placeholder-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-300"
+          className="text-md text-gray-800 border p-2 rounded-xl border-[#944EF8]/30 bg-white/50 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#944EF8]/50 backdrop-blur-xl transition-all duration-300"
           placeholder="Phone"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
         />
 
         <select
-          className="text-md text-white border-2 p-2 rounded-xl border-teal-500 bg-transparent placeholder-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-300"
+          className="text-md text-gray-800 border p-2 rounded-xl border-[#944EF8]/30 bg-white/50 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#944EF8]/50 backdrop-blur-xl transition-all duration-300"
           value={role}
           onChange={(e) => setRole(e.target.value)}
         >
-          <option value="" disabled>
+          <option value="" disabled className="bg-white text-gray-800">
             Select Role
           </option>
-          <option value="Admin">Admin</option>
-          <option value="Mechanic">Mechanic</option>
-          <option value="Team Leader">Team Leader</option>
-          <option value="Service Advisor">Service Advisor</option>
+          <option value="Admin" className="bg-white text-gray-800">Admin</option>
+          <option value="Mechanic" className="bg-white text-gray-800">Mechanic</option>
+          <option value="Team Leader" className="bg-white text-gray-800">Team Leader</option>
+          <option value="Service Advisor" className="bg-white text-gray-800">Service Advisor</option>
         </select>
 
         <button
-          className="bg-teal-500 text-white py-2 px-6 rounded-lg hover:bg-teal-400"
+          className="bg-gradient-to-r from-[#944EF8] to-[#944EF8]/80 text-white py-2 px-6 rounded-lg hover:from-[#944EF8]/90 hover:to-[#944EF8] transition-all duration-300 shadow-md flex justify-center items-center"
           onClick={handleSubmit}
           disabled={loading} // Disable button when loading
         >

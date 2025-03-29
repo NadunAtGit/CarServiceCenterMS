@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
 input::placeholder {
-    color: white;
-    opacity: 1; /* Ensures full opacity */
+    color: black; /* Placeholder text color */
+    opacity: 0.7; /* Ensures full opacity */
   }
