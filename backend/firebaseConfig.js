@@ -6,9 +6,12 @@ const serviceAccount = require("./sdp-project-939bd-firebase-adminsdk-fbsvc-f974
 
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
-    storageBucket: "sdp-project-939bd.firebasestorage.app", // Change this to your Firebase Storage bucket
+    storageBucket: "sdp-project-939bd.firebasestorage.app", // Firebase Storage bucket
 });
 
 const bucket = admin.storage().bucket();
 
-module.exports = bucket;
+// Firebase Messaging initialization
+const messaging = admin.messaging();
+
+module.exports = { bucket, messaging };

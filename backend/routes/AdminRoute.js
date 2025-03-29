@@ -9,8 +9,8 @@ const moment = require("moment");
 const { v4: uuidv4 } = require("uuid");
 const multer = require("multer");
 const path = require("path");
-const admin = require("firebase-admin");
-const bucket = admin.storage().bucket(); // Firebase storage bucket
+const { messaging, bucket } = require("../firebaseConfig"); 
+// Firebase storage bucket
 
 // Multer Storage Config
 const storage = multer.memoryStorage();

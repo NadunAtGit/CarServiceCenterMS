@@ -17,10 +17,10 @@ const MechanicHome = () => {
 
   const menuItems = [
       { title: "Dashboard", icon: <MdSpaceDashboard size={26} />, path: "/mechanic/dashboard" },
-      { title: "Appointments", icon: <MdOutlineEventNote size={26} />, path: "/admin/appointments" },
-      { title: "Reports", icon: <FaClipboardList size={26} />, path: "/admin/reports" },
+      // { title: "Appointments", icon: <MdOutlineEventNote size={26} />, path: "/mecha/appointments" },
+      // { title: "Reports", icon: <FaClipboardList size={26} />, path: "/mechanic/reports" },
      
-    ];
+  ];
 
     const toggleSidebar = () => {
       setIsOpen(!isOpen);

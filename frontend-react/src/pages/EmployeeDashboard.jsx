@@ -1,22 +1,9 @@
-import React, { useState,useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FaUser, FaEnvelope, FaPhone, FaCalendar, FaAddressCard, FaRegMoneyBillAlt, FaStar, FaSignOutAlt, FaClipboardList, FaClock } from 'react-icons/fa';
 import LeaveCard from '../components/Cards/LeaveCard';
 import axiosInstance from '../utils/AxiosInstance';
 
 const EmployeeDashBoard = () => {
-//   const userInfo = {
-//     username: 'john_doe',
-//     name: 'John Doe',
-//     email: 'johndoe@example.com',
-//     role: 'Software Engineer',
-//     department: 'Development',
-//     phone: '+1234567890',
-//     salary: '$5000',
-//     dateOfJoining: '01-01-2020',
-//     rating: 4.5,
-//     imageUrl: 'https://via.placeholder.com/150',
-//   };
-
   const appliedLeaves = [
     { leaveDate: '2025-03-10', leaveType: 'Full Day', reason: 'Personal Work' },
     { leaveDate: '2025-03-15', leaveType: 'Half Day', reason: 'Doctor Appointment' },
@@ -26,11 +13,10 @@ const EmployeeDashBoard = () => {
   const [userInfo, setUserInfo] = useState({}); 
   const [formError, setFormError] = useState(null);
 
-
   const getUserInfo = async () => {
     try {
-      const response = await axiosInstance.get("/api/admin/get-info-emp"); // Removed %0A
-      console.log("API Response:", response.data); // Debugging
+      const response = await axiosInstance.get("/api/admin/get-info-emp");
+      console.log("API Response:", response.data);
 
       if (response.data && response.data.success && response.data.employeeInfo) {
         const employee = response.data.employeeInfo;
@@ -62,7 +48,7 @@ const EmployeeDashBoard = () => {
   const markAttendance = async () => {
     try {
       const response = await axiosInstance.post('api/admin/mark-attendance', { status: 'Present' });
-      setAttendanceStatus(response.data.message); // Display success or failure message
+      setAttendanceStatus(response.data.message);
     } catch (error) {
       console.error('Error marking attendance:', error);
       setAttendanceStatus('Failed to mark attendance.');
@@ -71,136 +57,163 @@ const EmployeeDashBoard = () => {
   
   const markDeparture = async () => {
     try {
-      const response = await axiosInstance.post('api/admin/mark-departure'); // Use correct endpoint
-      setAttendanceStatus(response.data.message); // Display success or failure message
+      const response = await axiosInstance.post('api/admin/mark-departure');
+      setAttendanceStatus(response.data.message);
     } catch (error) {
       console.error('Error marking departure:', error);
       setAttendanceStatus('Failed to mark departure.');
     }
   };
-  
 
   useEffect(() => {
     getUserInfo();
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="bg-blue-500 text-white p-4 flex justify-between items-center">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-[#1a1a2e] to-[#16213e] text-gray-100 relative overflow-hidden">
+      {/* Glowing Background Elements */}
+      <div className="absolute -top-20 -right-20 w-96 h-96 bg-blue-600/30 rounded-full blur-[120px] animate-pulse"></div>
+      <div className="absolute -bottom-20 -left-20 w-96 h-96 bg-purple-600/30 rounded-full blur-[120px] animate-pulse"></div>
+
+      {/* Navbar */}
+      <div className="bg-[#0f1735]/60 backdrop-blur-md text-white p-4 flex justify-between items-center sticky top-0 z-10">
         <h1 className="text-2xl font-bold">Your Dashboard</h1>
-        <button className="bg-cyan-600 py-2 px-4 rounded-md hover:bg-red-600 flex items-center cursor-pointer font-bold">
+        <button className="bg-red-600/50 hover:bg-red-700/70 py-2 px-4 rounded-xl backdrop-blur-sm flex items-center cursor-pointer font-bold transition-all duration-300">
           <FaSignOutAlt className="mr-2" /> Logout
         </button>
       </div>
 
-      <div className="container mx-auto p-6 lg:flex lg:space-x-6">
-        <div className="lg:w-1/3 bg-white rounded-xl shadow-lg p-6 flex flex-col items-center border-4 border-blue-600 mb-3 justify-center">
-        <img src={userInfo?.imageUrl} alt={userInfo.name} 
-                className="w-44 h-44 rounded-full border-2 border-gray-300 mb-4 object-cover" />
-          <h2 className="text-xl font-semibold text-gray-800">{userInfo.name}</h2>
-          <p className="text-sm text-gray-500">{userInfo.role}</p>
-        </div>
+      {/* Main Content */}
+      <div className="container mx-auto p-6 space-y-6">
+        <div className="grid lg:grid-cols-3 gap-6">
+          {/* Profile Card */}
+          <div className="bg-[#1a1a2e]/60 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10 p-6 flex flex-col items-center justify-center relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-transparent via-white/5 to-transparent opacity-20"></div>
+            <img 
+              src={userInfo?.imageUrl || '/default-avatar.png'} 
+              alt={userInfo.name} 
+              className="w-44 h-44 rounded-full border-4 border-white/20 mb-4 object-cover z-10 relative"
+            />
+            <h2 className="text-xl font-semibold text-white z-10">{userInfo.name}</h2>
+            <p className="text-sm text-gray-400 z-10">{userInfo.role}</p>
+          </div>
 
-        <div className="lg:w-1/3 bg-white rounded-xl shadow-lg p-6 border-blue-600 border-4 flex flex-col justify-center mb-3">
-          <div className="space-y-4">
-            <div className="flex items-center space-x-2"><FaUser className="text-blue-500" /><span>{userInfo.username}</span></div>
-            <div className="flex items-center space-x-2"><FaEnvelope className="text-blue-500" /><span>{userInfo.email}</span></div>
-            <div className="flex items-center space-x-2"><FaPhone className="text-blue-500" /><span>{userInfo.phone}</span></div>
-            <div className="flex items-center space-x-2"><FaStar className="text-blue-500" /><span>Rating: {userInfo.rating}</span></div>
-            <div className="flex items-center space-x-2"><FaAddressCard className="text-blue-500" /><span>Department: {userInfo.role}</span></div>
+          {/* User Details Card */}
+          <div className="bg-[#1a1a2e]/60 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10 p-6 flex flex-col justify-center relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-transparent via-white/5 to-transparent opacity-20"></div>
+            <div className="space-y-4 z-10 relative">
+              <div className="flex items-center space-x-3"><FaUser className="text-blue-400" /><span>{userInfo.username}</span></div>
+              <div className="flex items-center space-x-3"><FaEnvelope className="text-blue-400" /><span>{userInfo.email}</span></div>
+              <div className="flex items-center space-x-3"><FaPhone className="text-blue-400" /><span>{userInfo.phone}</span></div>
+              <div className="flex items-center space-x-3"><FaStar className="text-blue-400" /><span>Rating: {userInfo.rating}</span></div>
+              <div className="flex items-center space-x-3"><FaAddressCard className="text-blue-400" /><span>Department: {userInfo.role}</span></div>
+            </div>
+          </div>
+
+          {/* Leave Application Card */}
+          <div className="bg-[#1a1a2e]/60 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10 p-6 relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-transparent via-white/5 to-transparent opacity-20"></div>
+            <h2 className="text-xl font-semibold text-white mb-4 z-10 relative">Apply for Leave</h2>
+            <form className="space-y-4 z-10 relative">
+              {formError && <div className="text-red-400">{formError}</div>}
+              <div>
+                <label htmlFor="leaveDate" className="block text-sm font-medium text-gray-300">Leave Date</label>
+                <input
+                  type="date"
+                  id="leaveDate"
+                  name="leaveDate"
+                  className="mt-1 block w-full p-2 bg-[#16213e]/50 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-blue-500 transition-all duration-300"
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="leaveType" className="block text-sm font-medium text-gray-300">Leave Type</label>
+                <select
+                  id="leaveType"
+                  name="leaveType"
+                  className="mt-1 block w-full p-2 bg-[#16213e]/50 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-blue-500 transition-all duration-300"
+                  required
+                >
+                  <option value="" className="bg-[#1a1a2e]">Select Leave Type</option>
+                  <option value="Full Day" className="bg-[#1a1a2e]">Full Day</option>
+                  <option value="Half Day" className="bg-[#1a1a2e]">Half Day</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="reason" className="block text-sm font-medium text-gray-300">Reason</label>
+                <textarea
+                  id="reason"
+                  name="reason"
+                  className="mt-1 block w-full p-2 bg-[#16213e]/50 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-blue-500 transition-all duration-300"
+                  required
+                />
+              </div>
+              <button 
+                type="submit" 
+                className="w-full bg-blue-600/50 hover:bg-blue-700/70 text-white py-2 rounded-xl backdrop-blur-sm transition-all duration-300"
+              >
+                Apply for Leave
+              </button>
+            </form>
           </div>
         </div>
 
-        <div className="lg:w-1/3 bg-white rounded-xl shadow-lg p-6 border-blue-600 border-4 mb-3">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">Apply for Leave</h2>
-          <form  className="space-y-4">
-            {formError && <div className="text-red-500">{formError}</div>}
-            <div>
-              <label htmlFor="leaveDate" className="block text-sm font-medium text-gray-700">Leave Date</label>
-              <input
-                type="date"
-                id="leaveDate"
-                name="leaveDate"
-                // value={leaveForm.leaveDate}
-                // onChange={handleLeaveChange}
-                className="mt-1 block w-full p-2 border border-gray-300 rounded-md"
-                required
-              />
-            </div>
-            <div>
-              <label htmlFor="leaveType" className="block text-sm font-medium text-gray-700">Leave Type</label>
-              <select
-                id="leaveType"
-                name="leaveType"
-                // value={leaveForm.leaveType}
-                // onChange={handleLeaveChange}
-                className="mt-1 block w-full p-2 border border-gray-300 rounded-md"
-                required
-              >
-                <option value="">Select Leave Type</option>
-                <option value="Full Day">Full Day</option>
-                <option value="Half Day">Half Day</option>
-              </select>
-            </div>
-            <div>
-              <label htmlFor="reason" className="block text-sm font-medium text-gray-700">Reason</label>
-              <textarea
-                id="reason"
-                name="reason"
-                // value={leaveForm.reason}
-                // onChange={handleLeaveChange}
-                className="mt-1 block w-full p-2 border border-gray-300 rounded-md"
-                required
-              />
-            </div>
-            <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700">
-              Apply for Leave
-            </button>
-          </form>
-        </div>
-      </div>
-
-      <div className="container mx-auto p-6">
-        <div className="bg-white rounded-xl shadow-lg p-6 flex items-center justify-between border-blue-600 border-4">
-          <div className="flex items-center space-x-4">
-            <FaClock className="text-blue-500" />
+        {/* Attendance Section */}
+        <div className="bg-[#1a1a2e]/60 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10 p-6 flex items-center justify-between relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-transparent via-white/5 to-transparent opacity-20"></div>
+          <div className="flex items-center space-x-4 z-10 relative">
+            <FaClock className="text-blue-400" />
             <span className="text-lg font-semibold">{new Date().toLocaleString()}</span>
           </div>
-          <div className="space-x-4">
+          <div className="space-x-4 z-10 relative">
             <button
               onClick={markAttendance}
-              className="bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700"
+              className="bg-green-600/50 hover:bg-green-700/70 text-white py-2 px-4 rounded-xl backdrop-blur-sm transition-all duration-300"
             >
               Mark Attendance
             </button>
             <button
               onClick={markDeparture}
-              className="bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700"
+              className="bg-red-600/50 hover:bg-red-700/70 text-white py-2 px-4 rounded-xl backdrop-blur-sm transition-all duration-300"
             >
               Mark Departure
             </button>
           </div>
         </div>
+
+        {/* Attendance Status */}
         {attendanceStatus && (
-          <div className="mt-4 text-center text-lg font-semibold text-gray-700">
+          <div className="text-center text-lg font-semibold text-gray-200 bg-[#1a1a2e]/60 backdrop-blur-xl rounded-xl p-4">
             {attendanceStatus}
           </div>
         )}
-      </div>
 
-      <div className="container mx-auto p-6">
-        <h2 className="text-2xl font-semibold text-gray-800 mb-4">Applied Leaves</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {appliedLeaves.length > 0 ? (
-            appliedLeaves.map((leave, index) => <LeaveCard key={index} leave={leave} />)
-          ) : (
-            <p className="text-gray-500">No applied leaves yet.</p>
-          )}
+        {/* Applied Leaves Section */}
+        <div>
+          <h2 className="text-2xl font-semibold text-white mb-4">Applied Leaves</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {appliedLeaves.length > 0 ? (
+              appliedLeaves.map((leave, index) => (
+                <div 
+                  key={index} 
+                  className="bg-[#1a1a2e]/60 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10 p-4 relative overflow-hidden"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-br from-transparent via-white/5 to-transparent opacity-20"></div>
+                  <div className="z-10 relative">
+                    <h3 className="text-lg font-semibold text-white mb-2">{leave.leaveType}</h3>
+                    <p className="text-gray-300">Date: {leave.leaveDate}</p>
+                    <p className="text-gray-300">Reason: {leave.reason}</p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-gray-400">No applied leaves yet.</p>
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
 };
-
 
 export default EmployeeDashBoard;

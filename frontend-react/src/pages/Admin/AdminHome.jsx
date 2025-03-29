@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FiMenu, FiLogOut } from 'react-icons/fi';
-import { FaUserCircle, FaUserTie, FaRegAddressCard, FaClipboardList,FaPaperPlane } from 'react-icons/fa';
+import { FaUserCircle, FaUserTie, FaRegAddressCard, FaClipboardList, FaPaperPlane } from 'react-icons/fa';
 import { MdSpaceDashboard, MdOutlineEventNote } from 'react-icons/md';
 import { Link, Outlet, useNavigate } from 'react-router-dom';
 import UserData from '../../components/UserData';
@@ -8,7 +8,7 @@ import axiosInstance from '../../utils/AxiosInstance';
 
 const AdminHome = () => {
   const [isOpen, setIsOpen] = useState(true);
-  const [userInfo, setUserInfo] = useState({}); // Ensure userInfo is initialized properly
+  const [userInfo, setUserInfo] = useState({});
   const [error, setError] = useState(null);
   const navigate = useNavigate();
 
@@ -20,7 +20,6 @@ const AdminHome = () => {
     { title: "Customers", icon: <FaRegAddressCard size={26} />, path: "/admin/customers" },
   ];
 
-  // Toggle sidebar
   const toggleSidebar = () => {
     setIsOpen(!isOpen);
   };
@@ -32,8 +31,8 @@ const AdminHome = () => {
 
   const getUserInfo = async () => {
     try {
-      const response = await axiosInstance.get("/api/admin/get-info-emp"); // Removed %0A
-      console.log("API Response:", response.data); // Debugging
+      const response = await axiosInstance.get("/api/admin/get-info-emp");
+      console.log("API Response:", response.data);
 
       if (response.data && response.data.success && response.data.employeeInfo) {
         const employee = response.data.employeeInfo;
@@ -68,17 +67,17 @@ const AdminHome = () => {
 
   return (
     <>
-      <div className="flex h-screen overflow-hidden">
+      <div className="flex h-screen overflow-hidden bg-gray-900">
         {/* Sidebar */}
         <div
           className={`${
             isOpen ? 'w-72' : 'w-20'
-          } fixed bg-gradient-to-b from-[#ff6b6b] via-[#ff3b3b] to-[#ff1e1e] min-h-screen h-full p-5 pt-8 relative flex flex-col transition-all duration-200 overflow-hidden`}
+          } fixed bg-gradient-to-br from-gray-800/80 via-gray-900/80 to-black/80 min-h-screen h-full p-5 pt-8 relative flex flex-col transition-all duration-200 overflow-hidden backdrop-blur-xl border-r border-gray-700/30 shadow-2xl`}
         >
           {/* Sidebar Toggle Button */}
           <FiMenu
             size={25}
-            className={`text-white absolute cursor-pointer transition-all duration-300 ${
+            className={`text-gray-300 absolute cursor-pointer transition-all duration-300 hover:text-white ${
               isOpen ? 'right-5' : 'right-1/2 transform translate-x-1/2'
             }`}
             onClick={toggleSidebar}
@@ -93,32 +92,32 @@ const AdminHome = () => {
             />
           ) : (
             <div className="flex items-center justify-center mt-10">
-              <FaUserCircle size={40} className="text-white" />
+              <FaUserCircle size={40} className="text-gray-300" />
             </div>
           )}
 
-          {isOpen &&(
-                      <div className="flex justify-center items-center mb-2">
-                          <Link to={'/employee-dashboard'} className="text-decoration-none">
-                            <button className="bg-white/10 text-white px-4 py-2 rounded-full flex items-center gap-2 backdrop-blur-md transition-transform transform hover:scale-95 focus:outline-none">
-                              <FaPaperPlane className="text-xl" />
-                              Your Dashboard
-                            </button>
-                          </Link>
-                      </div>
-          
+          {isOpen && (
+            <div className="flex justify-center items-center mb-2">
+              <Link to={'/employee-dashboard'} className="text-decoration-none">
+                <button className="bg-gray-700/30 text-gray-200 px-4 py-2 rounded-full flex items-center gap-2 backdrop-blur-md transition-transform transform hover:scale-95 focus:outline-none hover:bg-gray-600/50 border border-gray-600/30 shadow-lg">
+                  <FaPaperPlane className="text-xl" />
+                  Your Dashboard
+                </button>
+              </Link>
+            </div>
           )}
+
           {/* Menu Items */}
           <nav className="mt-1">
             {menuItems.map((item, index) => (
               <Link to={item.path} key={index} className="block">
                 <div
-                  className={`flex items-center text-white p-3 rounded-lg transition-all duration-200 border-2 border-white hover:bg-white/20 my-3 ${
+                  className={`flex items-center text-gray-300 p-3 rounded-lg transition-all duration-200 hover:bg-gray-700/50 hover:text-white my-3 border border-transparent hover:border-gray-600/30 ${
                     isOpen ? 'justify-start gap-4' : 'justify-center'
                   }`}
                 >
                   {item.icon}
-                  {isOpen && <span className="text-white font-medium">{item.title}</span>}
+                  {isOpen && <span className="font-medium">{item.title}</span>}
                 </div>
               </Link>
             ))}
@@ -127,21 +126,23 @@ const AdminHome = () => {
           {/* Logout Button */}
           <div className="mt-auto">
             <div
-              className={`flex items-center text-white p-3 rounded-lg cursor-pointer transition-all duration-200 hover:bg-white/20 ${
+              className={`flex items-center text-gray-300 p-3 rounded-lg cursor-pointer transition-all duration-200 hover:bg-gray-700/50 hover:text-white border border-transparent hover:border-gray-600/30 ${
                 isOpen ? 'justify-start gap-4' : 'justify-center'
               }`}
               onClick={onLogout}
             >
               <FiLogOut size={26} />
-              {isOpen && <span className="text-white font-medium">Logout</span>}
+              {isOpen && <span className="font-medium">Logout</span>}
             </div>
           </div>
         </div>
 
         {/* Main content */}
-        <div className="`flex-grow p-5 ml-${isOpen ? '72' : '20'} transition-all duration-200 h-screen overflow-y-auto w-full">
+        <div className={`flex-grow p-5 ml-${isOpen ? '72' : '20'} transition-all duration-200 h-screen overflow-y-auto w-full bg-gray-900`}>
           {error && <p className="text-red-500">{error}</p>}
-          <Outlet />
+          <div className="bg-gray-800/50 rounded-2xl p-6 backdrop-blur-xl border border-gray-700/30 shadow-2xl">
+            <Outlet />
+          </div>
         </div>
       </div>
     </>

@@ -5,6 +5,7 @@ const {generateJobCardId} = require("../GenerateId");
 const { validateEmail, validatePhoneNumber } = require("../validations");
 const jwt = require("jsonwebtoken");
 const{authenticateToken,authorizeRoles}=require("../utilities");
+const { messaging, bucket } = require("../firebaseConfig"); 
 
 const router = express.Router();
 
@@ -36,37 +37,72 @@ router.post("/create-jobcard/:appointmentId", authenticateToken, authorizeRoles(
                 return res.status(404).json({ error: true, message: "Appointment not found" });
             }
 
-            // Check if a JobCard already exists for this appointment
-            const checkJobCardQuery = "SELECT * FROM JobCards WHERE AppointmentID = ?";
-            db.query(checkJobCardQuery, [appointmentId], async (jobCardErr, jobCardResult) => {
-                if (jobCardErr) {
-                    console.error("Error checking JobCard:", jobCardErr);
-                    return res.status(500).json({ error: true, message: "Database error while checking job card" });
+            // Retrieve the customer's FirebaseToken (FCM token) from the Customers table
+            const customerFCMTokenQuery = "SELECT FirebaseToken FROM Customers WHERE CustomerID = ?";
+            db.query(customerFCMTokenQuery, [result[0].CustomerID], async (tokenErr, tokenResult) => {
+                if (tokenErr) {
+                    console.error("Error fetching FirebaseToken:", tokenErr);
+                    return res.status(500).json({ error: true, message: "Error retrieving Firebase token" });
                 }
 
-                // If a JobCard already exists for this appointment
-                if (jobCardResult.length > 0) {
-                    return res.status(400).json({ error: true, message: "Job Card already created for this appointment" });
+                if (tokenResult.length === 0 || !tokenResult[0].FirebaseToken) {
+                    return res.status(404).json({ error: true, message: "Customer's FirebaseToken not found" });
                 }
 
-                // Generate JobCardID (e.g., JC-0001, JC-0002, etc.)
-                const jobCardID = await generateJobCardId(); // You would need a function like generateJobCardId
+                const fcmToken = tokenResult[0].FirebaseToken;
 
-                // Insert into JobCards table
-                const insertQuery = `INSERT INTO JobCards (JobCardID, ServiceDetails, Type, AppointmentID)
-                                     VALUES (?, ?, ?, ?)`;
-
-                db.query(insertQuery, [jobCardID, ServiceDetails, Type, appointmentId], (insertErr, insertResult) => {
-                    if (insertErr) {
-                        console.error("Error inserting JobCard:", insertErr);
-                        return res.status(500).json({ error: true, message: "Internal server error" });
+                // Check if a JobCard already exists for this appointment
+                const checkJobCardQuery = "SELECT * FROM JobCards WHERE AppointmentID = ?";
+                db.query(checkJobCardQuery, [appointmentId], async (jobCardErr, jobCardResult) => {
+                    if (jobCardErr) {
+                        console.error("Error checking JobCard:", jobCardErr);
+                        return res.status(500).json({ error: true, message: "Database error while checking job card" });
                     }
 
-                    // Successfully created job card
-                    return res.status(200).json({
-                        success: true,
-                        message: "Job Card created successfully",
-                        jobCardID,
+                    // If a JobCard already exists for this appointment
+                    if (jobCardResult.length > 0) {
+                        return res.status(400).json({ error: true, message: "Job Card already created for this appointment" });
+                    }
+
+                    // Generate JobCardID (e.g., JC-0001, JC-0002, etc.)
+                    const jobCardID = await generateJobCardId(); // You would need a function like generateJobCardId
+
+                    // Insert into JobCards table
+                    const insertQuery = `INSERT INTO JobCards (JobCardID, ServiceDetails, Type, AppointmentID)
+                                         VALUES (?, ?, ?, ?)`;
+
+                    db.query(insertQuery, [jobCardID, ServiceDetails, Type, appointmentId], async (insertErr, insertResult) => {
+                        if (insertErr) {
+                            console.error("Error inserting JobCard:", insertErr);
+                            return res.status(500).json({ error: true, message: "Internal server error" });
+                        }
+
+                        // Successfully created job card
+                        console.log("Job Card created successfully");
+
+                        // Send push notification to the customer
+
+                        const notificationMessage = {
+                            notification: {
+                                title: 'Job Card Created',
+                                body: `Your job card (ID: ${jobCardID}) has been created.`,
+                            },
+                            token: fcmToken, // Customer's FCM token
+                        };
+                        
+                        try {
+                            // Send notification to the customer device
+                            await messaging.send(notificationMessage);  // Use messaging to send push notification
+                            console.log("Notification sent successfully!");
+                        } catch (notificationErr) {
+                            console.error("Error sending notification:", notificationErr);
+                        }
+                        // Respond back to the client
+                        return res.status(200).json({
+                            success: true,
+                            message: "Job Card created successfully and notification sent.",
+                            jobCardID,
+                        });
                     });
                 });
             });
@@ -76,49 +112,6 @@ router.post("/create-jobcard/:appointmentId", authenticateToken, authorizeRoles(
         return res.status(500).json({ error: true, message: "Server error" });
     }
 });
-
-
-// router.get("/jobcards", authenticateToken, async (req, res) => {
-//     try {
-//         const query = "SELECT * FROM JobCards";
-
-//         db.query(query, (err, results) => {
-//             if (err) {
-//                 console.error("Error fetching job cards:", err);
-//                 return res.status(500).json({ error: true, message: "Database error" });
-//             }
-
-//             return res.status(200).json({
-//                 success: true,
-//                 jobCards: results,
-//             });
-//         });
-//     } catch (error) {
-//         console.error("Error in fetching job cards:", error);
-//         return res.status(500).json({ error: true, message: "Server error" });
-//     }
-// });
-
-// router.get("/jobcards/ongoing", authenticateToken, async (req, res) => {
-//     try {
-//         const query = "SELECT * FROM JobCards WHERE Status = 'Ongoing'";
-
-//         db.query(query, (err, results) => {
-//             if (err) {
-//                 console.error("Error fetching ongoing job cards:", err);
-//                 return res.status(500).json({ error: true, message: "Database error" });
-//             }
-
-//             return res.status(200).json({
-//                 success: true,
-//                 jobCards: results,
-//             });
-//         });
-//     } catch (error) {
-//         console.error("Error in fetching ongoing job cards:", error);
-//         return res.status(500).json({ error: true, message: "Server error" });
-//     }
-// });
 
 
 module.exports = router;

@@ -5,7 +5,7 @@ const {generateCustomerId}=require("../GenerateId")
 const { validateEmail, validatePhoneNumber } = require("../validations");
 const jwt = require("jsonwebtoken");
 const{authenticateToken,authorizeRoles}=require("../utilities")
-
+const admin=require("firebase-admin");
 const router = express.Router();
 
 router.use((req, res, next) => {
@@ -17,9 +17,9 @@ router.post("/customer-signup", async (req, res) => {
     try {
         console.log("Inside /customer-signup route handler");
 
-        const { FirstName, SecondName, Telephone, Email, Password, Username, profilePicUrl } = req.body;
+        const { FirstName, SecondName, Telephone, Email, Password, Username, profilePicUrl, FirebaseToken } = req.body;
 
-        if (!FirstName || !Email || !Password || !Username) {
+        if (!FirstName || !Email || !Password || !Username || !FirebaseToken) {
             return res.status(400).json({ error: "Missing required fields" });
         }
 
@@ -41,8 +41,8 @@ router.post("/customer-signup", async (req, res) => {
         // Generate Customer ID (use await here)
         const CustomerId = await generateCustomerId(); 
 
-        const query = "INSERT INTO Customers (CustomerID, FirstName, SecondName, Telephone, Email, Password, Username, profilePicUrl) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
-        const values = [CustomerId, FirstName, SecondName, Telephone, Email, hashedPassword, Username, profilePic];
+        const query = "INSERT INTO Customers (CustomerID, FirstName, SecondName, Telephone, Email, Password, Username, profilePicUrl, FirebaseToken) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        const values = [CustomerId, FirstName, SecondName, Telephone, Email, hashedPassword, Username, profilePic, FirebaseToken];
 
         db.query(query, values, (err, result) => {
             if (err) {

@@ -3,10 +3,9 @@ import { MdClose } from "react-icons/md";
 import ImageSelector from "../INPUTS/ImageSelector";
 import { uploadImage } from "../../utils/UploadImage";
 import axiosInstance from "../../utils/AxiosInstance";
-import { ToastContainer,toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";//
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 import { CircularProgress } from "@mui/material";
-//  Import the upload function
 
 const AddEmployee = ({ onClose, getEmployees }) => {
   const [username, setUsername] = useState("");
@@ -25,13 +24,13 @@ const AddEmployee = ({ onClose, getEmployees }) => {
       setError("Please fill all required fields");
       return;
     }
-  
+
     setError("");
-    setLoading(true);  // Clear previous errors
-  
+    setLoading(true); // Clear previous errors
+
     try {
       let uploadedImageUrl = profilePicUrl;
-  
+
       if (profilePic) { // Ensure image exists
         console.log("Uploading image...");
         const uploadedUrl = await uploadImage(profilePic, "employeepics");
@@ -44,14 +43,14 @@ const AddEmployee = ({ onClose, getEmployees }) => {
           uploadedImageUrl = ""; // Ensure profilePicUrl is empty on failure
         }
       }
-  
+
       // If no image is uploaded, you can decide whether to set a default or skip it
       if (!uploadedImageUrl) {
         uploadedImageUrl = "path_to_default_image"; // Or leave it empty if you don't want to send it
       }
-  
+
       console.log("Final profilePicUrl:", uploadedImageUrl);
-  
+
       const response = await axiosInstance.post("api/admin/create-employee", {
         name,
         username,
@@ -61,7 +60,7 @@ const AddEmployee = ({ onClose, getEmployees }) => {
         role,
         profilePicUrl: uploadedImageUrl, // Send uploaded URL or default URL
       });
-  
+
       if (response.data) {
         toast.success("Employee created successfully");
         getEmployees();
@@ -71,23 +70,20 @@ const AddEmployee = ({ onClose, getEmployees }) => {
       setError("Error creating employee, please try again.");
       toast.error("Error creating employee, please try again.");
       console.error("Error details:", error.response || error); // Log the full error
-  
     }
   };
-  
-  
 
   return (
-    <div className="relative mx-auto bg-white rounded-lg p-6 max-w-xl shadow-lg top-40">
+    <div className="relative mx-auto bg-[#1e1e2f] rounded-lg p-6 max-w-xl shadow-lg top-10 backdrop-blur-lg bg-opacity-50">
       <button
-        className="absolute top-2 right-2 rounded-full bg-red-500 p-1 hover:bg-red-600"
+        className="absolute top-2 right-2 rounded-full bg-teal-600 p-1 hover:bg-teal-700"
         onClick={onClose}
       >
         <MdClose className="text-white" size={25} />
       </button>
 
       <div className="flex items-center flex-col gap-4 mb-6">
-        <h1 className="text-xl font-bold text-gray-800">Create Employee</h1>
+        <h1 className="text-xl font-bold text-teal-400">Create Employee</h1>
         <ImageSelector setImage={setProfilePic} image={profilePic} />
       </div>
 
@@ -96,7 +92,7 @@ const AddEmployee = ({ onClose, getEmployees }) => {
       <div className="flex flex-col gap-4">
         <input
           type="text"
-          className="text-md text-gray-900 border-2 p-2 rounded-xl border-red-500 w-full"
+          className="text-md text-white border-2 p-2 rounded-xl border-teal-500 bg-transparent placeholder-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-300"
           placeholder="Name"
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -104,7 +100,7 @@ const AddEmployee = ({ onClose, getEmployees }) => {
 
         <input
           type="text"
-          className="text-md text-gray-900 border-2 p-2 rounded-xl border-red-500 w-full"
+          className="text-md text-white border-2 p-2 rounded-xl border-teal-500 bg-transparent placeholder-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-300"
           placeholder="Username"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
@@ -112,7 +108,7 @@ const AddEmployee = ({ onClose, getEmployees }) => {
 
         <input
           type="email"
-          className="text-md text-gray-900 border-2 p-2 rounded-xl border-red-500 w-full"
+          className="text-md text-white border-2 p-2 rounded-xl border-teal-500 bg-transparent placeholder-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-300"
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -120,7 +116,7 @@ const AddEmployee = ({ onClose, getEmployees }) => {
 
         <input
           type="password"
-          className="text-md text-gray-900 border-2 p-2 rounded-xl border-red-500 w-full"
+          className="text-md text-white border-2 p-2 rounded-xl border-teal-500 bg-transparent placeholder-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-300"
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
@@ -128,14 +124,14 @@ const AddEmployee = ({ onClose, getEmployees }) => {
 
         <input
           type="text"
-          className="text-md text-gray-900 border-2 p-2 rounded-xl border-red-500 w-full"
+          className="text-md text-white border-2 p-2 rounded-xl border-teal-500 bg-transparent placeholder-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-300"
           placeholder="Phone"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
         />
 
         <select
-          className="text-md text-gray-900 border-2 p-2 rounded-xl border-red-500 w-full"
+          className="text-md text-white border-2 p-2 rounded-xl border-teal-500 bg-transparent placeholder-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-300"
           value={role}
           onChange={(e) => setRole(e.target.value)}
         >
@@ -149,7 +145,7 @@ const AddEmployee = ({ onClose, getEmployees }) => {
         </select>
 
         <button
-          className="bg-red-500 text-white py-2 px-6 rounded-lg hover:bg-red-300"
+          className="bg-teal-500 text-white py-2 px-6 rounded-lg hover:bg-teal-400"
           onClick={handleSubmit}
           disabled={loading} // Disable button when loading
         >

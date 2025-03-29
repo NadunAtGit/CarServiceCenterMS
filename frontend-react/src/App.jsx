@@ -77,8 +77,7 @@ const App = () => {
             }
           >
                 <Route index element={<TeamLeaderJobCards />} />
-                <Route path="assign" element={<TeamLeaderAssign />} />
-                <Route path="jobcards-leader" element={<TeamLeaderJobCards />} />
+                
           </Route>
 
           <Route 
@@ -91,7 +90,7 @@ const App = () => {
           >
                 <Route index element={<MechanicDashboard />} />
                 <Route path="dashboard" element={<MechanicDashboard />} />
-                
+                <Route path="appointments" element={<MechanicDashboard />} />
           </Route>
 
       </Routes>
