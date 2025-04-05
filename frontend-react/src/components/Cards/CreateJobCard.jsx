@@ -1,69 +1,84 @@
-import React, { useState,useEffect } from "react";
-import { FaCalendarAlt, FaClock, FaUser, FaCar } from "react-icons/fa";
-import Modal from "react-modal";
-import AddJobCard from "../Modals/AddJobCard";
+import React from 'react';
+import { FiPlus } from "react-icons/fi";
 
-const CreateJobCard = ({ appointment, recallTable, recallCarousel }) => {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-
-  const openModal = () => {
-    setIsModalOpen(true);
+const CreateJobCard = ({ appointment, recallCarousel, recallTable, onCreateJobCard }) => {
+  // Format date helper function
+  const formatDate = (dateString) => {
+    const options = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+    return new Date(dateString).toLocaleDateString(undefined, options);
   };
 
-  const closeModal = () => {
-    setIsModalOpen(false);
-  };
+  // Extract necessary information from appointment
+  const {
+    AppointmentID,
+    CustomerName = "Customer", // Default value
+    VehicleModel = "Vehicle", // Default value
+    Date: appointmentDate,
+    Status = "Scheduled", // Default value
+    Description = "No description provided" // Default value
+  } = appointment;
 
-    
+  // Determine status color
+  const getStatusColor = (status) => {
+    switch (status?.toLowerCase()) {
+      case 'completed':
+        return 'bg-green-100 text-green-800';
+      case 'in progress':
+        return 'bg-blue-100 text-blue-800';
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'cancelled':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-purple-100 text-purple-800';
+    }
+  };
 
   return (
-    <div className="p-7 border-3 border-red-400 rounded-2xl shadow-lg space-y-4 w-full mb-10">
-      <h1 className="text-xl font-bold">Appointment</h1>
-      <div className="space-y-2">
-        <div className="flex items-center space-x-2">
-          <FaCalendarAlt className="text-blue-500" />
-          <span>{appointment.AppointmentMadeDate}</span>
-        </div>
-        <div className="flex items-center space-x-2">
-          <FaClock className="text-green-500" />
-          <span>{appointment.Time}</span>
-        </div>
-        <div className="flex items-center space-x-2">
-          <FaUser className="text-purple-500" />
-          <span>{appointment.CustomerID}</span>
-        </div>
-        <div className="flex items-center space-x-2">
-          <FaCar className="text-red-500" />
-          <span>{appointment.VehicleID}</span>
+    <div className="bg-white/80 rounded-lg shadow-md overflow-hidden backdrop-blur-sm border border-[#944EF8]/10 h-full flex flex-col">
+      {/* Header with gradient */}
+      <div className="bg-gradient-to-r from-[#944EF8]/80 to-[#944EF8]/60 p-3 text-white">
+        <div className="flex justify-between items-center">
+          <h3 className="font-bold truncate">{AppointmentID}</h3>
+          <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(Status)}`}>
+            {Status}
+          </span>
         </div>
       </div>
-      <div className="flex space-x-4">
+      
+      {/* Body */}
+      <div className="p-4 flex-grow flex flex-col">
+        <div className="mb-3">
+          <p className="text-sm text-gray-500">Customer</p>
+          <p className="font-medium text-gray-800">{CustomerName}</p>
+        </div>
+        
+        <div className="mb-3">
+          <p className="text-sm text-gray-500">Vehicle</p>
+          <p className="font-medium text-gray-800">{VehicleModel}</p>
+        </div>
+        
+        <div className="mb-3">
+          <p className="text-sm text-gray-500">Date & Time</p>
+          <p className="font-medium text-gray-800">{formatDate(appointmentDate)}</p>
+        </div>
+        
+        <div className="flex-grow">
+          <p className="text-sm text-gray-500">Description</p>
+          <p className="text-gray-700 text-sm line-clamp-2">{Description}</p>
+        </div>
+      </div>
+      
+      {/* Footer with create job card button */}
+      <div className="bg-gray-50 p-3 border-t border-gray-100">
         <button
-          className="flex-1 px-4 py-2 bg-green-500 text-white rounded-lg shadow-md hover:bg-green-600 disabled:opacity-50"
-          onClick={openModal}
+          onClick={onCreateJobCard}
+          className="w-full bg-[#944EF8] hover:bg-[#7a3dd0] text-white py-2 rounded-md transition-colors flex items-center justify-center gap-2"
         >
+          <FiPlus size={18} />
           Create Job Card
         </button>
       </div>
-
-      <Modal
-        isOpen={isModalOpen}
-        onRequestClose={closeModal}
-        style={{
-          overlay: {
-            backgroundColor: "rgba(0,0,0,0.2)",
-            zIndex: 999,
-          },
-        }}
-        className="model-box"
-      >
-        <AddJobCard
-          onClose={closeModal}
-          getJobCards={recallTable}
-          appointmentId={appointment.AppointmentID}
-          recallCarousel={recallCarousel}
-        />
-      </Modal>
     </div>
   );
 };

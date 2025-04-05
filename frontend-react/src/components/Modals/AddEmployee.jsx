@@ -146,6 +146,7 @@ const AddEmployee = ({ onClose, getEmployees }) => {
           <option value="Mechanic" className="bg-white text-gray-800">Mechanic</option>
           <option value="Team Leader" className="bg-white text-gray-800">Team Leader</option>
           <option value="Service Advisor" className="bg-white text-gray-800">Service Advisor</option>
+          <option value="Cashier" className="bg-white text-gray-800">Cashier</option>
         </select>
 
         <button

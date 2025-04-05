@@ -69,6 +69,9 @@ const generateEmployeeId = async (role) => {
             case "team leader":
                 prefix = "TL";
                 break;
+            case "cashier":
+                prefix = "C";
+                break;
             default:
                 return reject(new Error("Invalid role provided"));
         }
@@ -127,13 +130,44 @@ const generateJobCardId = async () => {
     });
 };
 
+const generateOrderId = async () => {
+    return new Promise((resolve, reject) => {
+        const query = "SELECT OrderID FROM PartOrders ORDER BY OrderID DESC LIMIT 1";
+
+        db.query(query, (err, result) => {
+            if (err) {
+                console.error("Error fetching last OrderID:", err);
+                return reject(err);
+            }
+
+            let newId;
+            if (result.length === 0 || !result[0].OrderID) {
+                newId = "PO-0001"; // First Order ID
+            } else {
+                let lastId = result[0].OrderID; // e.g., "PO-9999" or "PO-00009"
+                let lastNum = parseInt(lastId.split("-")[1], 10) || 0;
+                let nextNum = lastNum + 1;
+
+                // Dynamically determine how many digits needed (minimum 4, then expand)
+                let length = nextNum > 9999 ? 5 : 4;
+
+                newId = `PO-${nextNum.toString().padStart(length, "0")}`;
+            }
+
+            resolve(newId);
+        });
+    });
+};
+
+
 
 
 module.exports = {
     generateCustomerId,
     generateAppointmentId,
     generateEmployeeId,
-    generateJobCardId
+    generateJobCardId,
+    generateOrderId
 };
 
 

@@ -1,62 +1,49 @@
-import React, { useState } from "react"; // Make sure to import useState
+import React, { useState } from "react";
 import { FaClipboardList, FaTools, FaCheckCircle, FaUserPlus } from "react-icons/fa";
 import Modal from "react-modal";
-import AssignWorkersModal from "../Modals/AssignWorkersModal"; // Import the modal
+import AssignWorkersModal from "../Modals/AssignWorkersModal";
 
 const AssignWorkerCard = ({ job, onAssign }) => {
-  const [isModalOpen, setIsModalOpen] = useState(false); // Track modal visibility
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const openModal = () => {
-    setIsModalOpen(true);
-  };
-
-  const closeModal = () => {
-    setIsModalOpen(false);
-  };
+  const openModal = () => setIsModalOpen(true);
+  const closeModal = () => setIsModalOpen(false);
 
   return (
-    <div className="bg-white shadow-lg rounded-lg p-5 border border-gray-300 w-80 mx-auto">
-      {/* Left-aligned details */}
-      <h2 className="text-lg font-semibold mb-2 flex items-center gap-2 text-left">
-        <FaClipboardList className="text-blue-500" /> {job.JobCardID}
+    <div className="bg-gradient-to-br from-white/80 via-white/60 to-white/80 shadow-lg rounded-2xl p-5 border border-[#944EF8]/20 w-full max-w-sm mx-auto backdrop-blur-xl transition-all transform hover:scale-105">
+      {/* Job Details */}
+      <h2 className="text-lg font-semibold mb-2 flex items-center gap-2 text-left text-[#944EF8]">
+        <FaClipboardList /> {job.JobCardID}
       </h2>
-
-      <p className="text-gray-600 flex items-center gap-2 text-left">
+      <p className="text-gray-700 flex items-center gap-2 text-left">
         <FaTools className="text-green-500" />
         {job.ServiceDetails}
       </p>
-
-      <p className="text-gray-600 flex items-center gap-2 mt-2 text-left">
+      <p className="text-gray-700 flex items-center gap-2 mt-2 text-left">
         <FaCheckCircle className="text-purple-500" />
         Type: {job.Type}
       </p>
-
-      {/* Assign Worker Button - Centered */}
+      
+      {/* Assign Worker Button */}
       <div className="flex justify-center mt-4">
         <button
-          onClick={openModal}  // Open modal when clicked
-          className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded flex items-center gap-2"
+          onClick={openModal}
+          className="bg-gradient-to-r from-[#944EF8]/80 to-[#944EF8]/60 text-white font-bold py-2 px-4 rounded-full flex items-center gap-2 backdrop-blur-md transition-all transform hover:scale-95 focus:outline-none hover:from-[#944EF8]/90 hover:to-[#944EF8]/70 border border-[#944EF8]/30 shadow-md"
         >
           <FaUserPlus /> Assign Worker
         </button>
       </div>
-
+      
       {/* Modal */}
       <Modal
         isOpen={isModalOpen}
         onRequestClose={closeModal}
+        className="modal-box"
         style={{
-          overlay: {
-            backgroundColor: "rgba(0,0,0,0.2)",
-            zIndex: 999,
-          },
+          overlay: { backgroundColor: "rgba(0,0,0,0.2)", zIndex: 999 },
         }}
-        className="model-box"
       >
-        <AssignWorkersModal 
-          jobCardId={job.JobCardID} // Pass job card ID to modal
-          onClose={closeModal} 
-        />
+        <AssignWorkersModal jobCardId={job.JobCardID} onClose={closeModal} />
       </Modal>
     </div>
   );

@@ -13,7 +13,7 @@ const Login = () => {
     const [error, setError] = useState(null);
     const navigate = useNavigate();
 
-    const handleLogin=async(e)=>{
+    const handleLogin = async (e) => {
       e.preventDefault();
 
       if (!validateEmail(email)) {
@@ -30,8 +30,8 @@ const Login = () => {
       // Clear previous errors
       setError(null);
 
-      try{
-          const response=await axiosInstance.post("/api/admin/employee-login",{
+      try {
+          const response = await axiosInstance.post("/api/admin/employee-login", {
             email,
             password
           });
@@ -46,19 +46,18 @@ const Login = () => {
       
             // Navigate to the appropriate page based on the role
             if (userRole === 'Admin') {
-              navigate("/admin"); // Admin or Manager should be redirected to Home
+              navigate("/admin"); 
             } else if (userRole === 'Team Leader') {
-              navigate("/teamleader"); // Team Leader should be redirected to Home
-              // Other users should be redirected to Employee Dashboard
-            }else if(userRole === 'Service Advisor'){
+              navigate("/teamleader");
+            } else if (userRole === 'Service Advisor') {
               navigate("/serviceadvisor");
+            } else if (userRole === 'Mechanic') {
+              navigate("/mechanic");
+            }else if (userRole === 'Cashier') {
+              navigate("/cashier");
+            }
           }
-          else if(userRole === 'Mechanic'){
-            navigate("/mechanic");
-
-          }
-        }
-      }catch(error){
+      } catch (error) {
         if (error.response) {
           console.log("Error Response:", error.response);
     
@@ -75,32 +74,31 @@ const Login = () => {
           setError("An unexpected error occurred. Please try again.");
         }
       }
-
     }
 
-
-
   return (
-    <div className='flex items-center justify-center min-h-screen p-5 relative'>
+    <div className='flex items-center justify-center min-h-screen p-5 relative bg-gradient-to-br from-[#F8F9FD] to-[#E2E6F4]'>
       {/* Brand Logo */}
-      <div className='absolute top-3 left-5'>
-        <img src={LOGO} className='w-32 object-contain' alt="Brand Logo" />
+      <div className='absolute top-5 left-5'>
+        <img src={LOGO} className='w-36 object-contain' alt="Brand Logo" />
       </div>
 
       {/* Login Container */}
-      <div className='max-w-3xl w-full bg-white shadow-lg rounded-lg overflow-hidden md:flex border border-gray-300'>
+      <div className='max-w-4xl w-full bg-white/80 backdrop-blur-md shadow-xl rounded-2xl overflow-hidden md:flex border border-[#944EF8]/20'>
         {/* Left Side (Form) */}
         <div className='w-full md:w-1/2 p-10 flex items-center justify-center'>
           <div className='w-full max-w-sm'>
-            <h2 className='text-4xl font-semibold mb-4'>Login</h2>
-            <p className='text-sm text-gray-500 mb-6'>
-              Welcome back, enter your credentials
+            <h2 className='text-4xl font-semibold mb-4 text-gray-800 flex items-center'>
+              <span className='bg-clip-text text-transparent bg-gradient-to-r from-[#944EF8] to-[#7a3fd0]'>Login</span>
+            </h2>
+            <p className='text-sm text-gray-600 mb-8'>
+              Welcome back, enter your credentials to continue
             </p>
 
-            <form className="space-y-6" onSubmit={handleLogin}>
+            <form className="space-y-8" onSubmit={handleLogin}>
               {/* Email Input */}
-              <div>
-                <label htmlFor='email' className='block text-sm font-medium text-gray-600 mb-2'>
+              <div className="relative">
+                <label htmlFor='email' className='block text-sm font-medium text-gray-700 mb-2'>
                   Email
                 </label>
                 <input
@@ -110,22 +108,26 @@ const Login = () => {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className='w-full px-4 py-2 text-sm border-b border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:rounded-lg'
+                  className='w-full px-4 py-3 text-sm border-b-2 border-gray-300 focus:border-[#944EF8] focus:outline-none transition-colors bg-transparent rounded-t-lg'
                 />
               </div>
 
               {/* Password Input */}
-              <div>
-                <label htmlFor='password' className='block text-sm font-medium text-gray-600 mb-2'>
+              <div className="relative">
+                <label htmlFor='password' className='block text-sm font-medium text-gray-700 mb-2'>
                   Password
                 </label>
-                <PasswordInput  value={password} onChange={(e) => setPassword(e.target.value)}/>
+                <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} />
               </div>
 
-              {error && <p className="mb-4 text-xs text-red-500">{error}</p>}
+              {error && (
+                <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded">
+                  <p className="text-sm text-red-700">{error}</p>
+                </div>
+              )}
 
               {/* Login Button */}
-              <button className='w-full bg-red-500 text-white py-2 rounded-md hover:bg-blue-700 transition'>
+              <button className='w-full bg-gradient-to-r from-[#944EF8] to-[#7a3fd0] text-white py-3 rounded-lg hover:from-[#8144df] hover:to-[#6935b7] transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-[0.98] font-medium'>
                 Login
               </button>
             </form>
@@ -133,7 +135,8 @@ const Login = () => {
         </div>
 
         {/* Right Side (Image) */}
-        <div className='hidden md:flex md:w-1/2'>
+        <div className='hidden md:block md:w-1/2 relative overflow-hidden'>
+          <div className="absolute inset-0 bg-gradient-to-tr from-[#944EF8]/60 to-transparent mix-blend-multiply"></div>
           <img src={LoginBg} className='w-full h-full object-cover' alt='Login Background' />
         </div>
       </div>

@@ -1,23 +1,21 @@
-import React, { useState,useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FiMenu, FiLogOut } from 'react-icons/fi';
-import { FaUserCircle } from 'react-icons/fa';
+import { FaUserCircle, FaClipboardList, FaPaperPlane } from 'react-icons/fa';
 import { MdOutlineEventNote } from 'react-icons/md';
-import { FaClipboardList ,FaPaperPlane} from 'react-icons/fa';
 import UserData from '../../components/UserData';
 import axiosInstance from '../../utils/AxiosInstance';
 import { Link, Outlet, useNavigate } from 'react-router-dom';
 
 const TeamLeaderHome = () => {
-
-    const [isOpen, setIsOpen] = useState(true);
-  const [userInfo, setUserInfo] = useState({}); // Ensure userInfo is initialized properly
+  const [isOpen, setIsOpen] = useState(true);
+  const [userInfo, setUserInfo] = useState({});
   const [error, setError] = useState(null);
   const navigate = useNavigate();
 
   const getUserInfo = async () => {
     try {
-      const response = await axiosInstance.get("/api/admin/get-info-emp"); // Removed %0A
-      console.log("API Response:", response.data); // Debugging
+      const response = await axiosInstance.get("/api/admin/get-info-emp");
+      console.log("API Response:", response.data);
 
       if (response.data && response.data.success && response.data.employeeInfo) {
         const employee = response.data.employeeInfo;
@@ -60,24 +58,25 @@ const TeamLeaderHome = () => {
     navigate("/login");
   };
 
-  // Sidebar Menu Items (Only Appointments & Job Card)
+  // Sidebar Menu Items (Only Assignments & Job Cards)
   const menuItems = [
-    { title: "Assign", icon: <MdOutlineEventNote size={30} className="text-white font-bold" />, path: "/teamleader/assign" },
-    { title: "Job Cards", icon: <FaClipboardList size={30} className="text-white font-bold" />, path: "/teamleader/jobcards-leader" },
+    { title: "Assign", icon: <MdOutlineEventNote size={26} />, path: "/teamleader/assign" },
+    { title: "Job Cards", icon: <FaClipboardList size={26} />, path: "/teamleader/jobcards-leader" },
   ];
+
   return (
     <>
-      <div className="flex min-h-screen">
+      <div className="flex h-screen overflow-hidden bg-[#D8D8D8]">
         {/* Sidebar */}
         <div
           className={`${
-            isOpen ? 'w-72' : 'w-20'
-          } fixed bg-gradient-to-b from-[#ff6b6b] via-[#ff3b3b] to-[#ff1e1e] min-h-screen h-full p-5 pt-8 relative flex flex-col transition-all duration-200`}
+            isOpen ? 'w-82' : 'w-25'
+          } fixed bg-gradient-to-br from-white/80 via-white/60 to-white/80 min-h-screen h-full p-5 pt-8 relative flex flex-col transition-all duration-200 overflow-hidden backdrop-blur-xl border-r border-[#944EF8]/20 shadow-lg`}
         >
           {/* Sidebar Toggle Button */}
           <FiMenu
             size={25}
-            className={`text-white absolute cursor-pointer transition-all duration-300 ${
+            className={`text-[#944EF8] absolute cursor-pointer transition-all duration-300 hover:text-[#7a3fd0] ${
               isOpen ? 'right-5' : 'right-1/2 transform translate-x-1/2'
             }`}
             onClick={toggleSidebar}
@@ -85,37 +84,39 @@ const TeamLeaderHome = () => {
 
           {/* User Info */}
           {isOpen ? (
-            <UserData username={userInfo.username} role={userInfo.role} imgUrl={userInfo?.imageUrl || "https://via.placeholder.com/150"} />
+            <UserData 
+              username={userInfo?.username || "N/A"} 
+              role={userInfo?.role || "N/A"} 
+              imgUrl={userInfo?.imageUrl || "https://via.placeholder.com/150"}
+            />
           ) : (
             <div className="flex items-center justify-center mt-10">
-              <FaUserCircle size={40} className="text-white" />
+              <FaUserCircle size={40} className="text-[#944EF8]" />
             </div>
           )}
-          
-          {isOpen &&(
-            <div className="flex justify-center items-center h-full">
-                <Link to={'/employee-dashboard'} className="text-decoration-none">
-                  <button className="bg-white/10 text-white px-4 py-2 rounded-full flex items-center gap-2 backdrop-blur-md transition-transform transform hover:scale-95 focus:outline-none">
-                    <FaPaperPlane className="text-xl" />
-                    Your Dashboard
-                  </button>
-                </Link>
-            </div>
 
+          {isOpen && (
+            <div className="flex justify-center items-center mb-2">
+              <Link to={'/employee-dashboard'} className="text-decoration-none">
+                <button className="bg-gradient-to-r from-[#944EF8]/80 to-[#944EF8]/60 text-white px-4 py-2 rounded-full flex items-center gap-2 backdrop-blur-md transition-all transform hover:scale-95 focus:outline-none hover:from-[#944EF8]/90 hover:to-[#944EF8]/70 border border-[#944EF8]/30 shadow-md">
+                  <FaPaperPlane className="text-xl" />
+                  Your Dashboard
+                </button>
+              </Link>
+            </div>
           )}
-          
 
           {/* Menu Items */}
-          <nav className="mt-10">
+          <nav className="mt-1">
             {menuItems.map((item, index) => (
               <Link to={item.path} key={index} className="block">
                 <div
-                  className={`flex items-center text-white p-3 rounded-lg transition-all duration-200 border-2 border-white hover:bg-white/20 my-3 ${
+                  className={`flex items-center text-gray-700 p-3 rounded-lg transition-all duration-200 hover:bg-[#944EF8]/10 hover:text-[#944EF8] my-3 border border-transparent hover:border-[#944EF8]/20 ${
                     isOpen ? 'justify-start gap-4' : 'justify-center'
                   }`}
                 >
                   {item.icon}
-                  {isOpen && <span className="text-white font-medium">{item.title}</span>}
+                  {isOpen && <span className="font-medium">{item.title}</span>}
                 </div>
               </Link>
             ))}
@@ -124,24 +125,27 @@ const TeamLeaderHome = () => {
           {/* Logout Button */}
           <div className="mt-auto">
             <div
-              className={`flex items-center text-white p-3 rounded-lg cursor-pointer transition-all duration-200 hover:bg-white/20 ${
+              className={`flex items-center text-gray-700 p-3 rounded-lg cursor-pointer transition-all duration-200 hover:bg-[#944EF8]/10 hover:text-[#944EF8] border border-transparent hover:border-[#944EF8]/20 ${
                 isOpen ? 'justify-start gap-4' : 'justify-center'
               }`}
               onClick={onLogout}
             >
               <FiLogOut size={26} />
-              {isOpen && <span className="text-white font-medium">Logout</span>}
+              {isOpen && <span className="font-medium">Logout</span>}
             </div>
           </div>
         </div>
 
-        {/* Main Content */}
-        <div className="flex-grow p-5">
-          <Outlet />
+        {/* Main content */}
+        <div className={`flex-grow p-5 transition-all duration-200 h-screen overflow-y-auto w-full bg-[#D8D8D8]`}>
+          {error && <p className="text-red-500">{error}</p>}
+          <div className="bg-white/70 rounded-2xl p-6 backdrop-blur-xl border border-[#944EF8]/10 shadow-lg">
+            <Outlet />
+          </div>
         </div>
       </div>
     </>
-  )
-}
+  );
+};
 
-export default TeamLeaderHome
+export default TeamLeaderHome;

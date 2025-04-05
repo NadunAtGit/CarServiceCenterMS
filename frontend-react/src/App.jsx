@@ -19,6 +19,15 @@ import TeamLeaderJobCards from './pages/TeamLeader/TeamLeaderJobCards';
 
 import MechanicHome from './pages/Mechanic/MechanicHome';
 import MechanicDashboard from './pages/Mechanic/MechanicDashboard';
+import MechanicJobcards from './pages/Mechanic/MechanicJobcards';
+
+import CashierHome from './pages/Cashier/CashierHome';
+import CashierDashboard from './pages/Cashier/CashierDashboard';
+import CashierOrders from './pages/Cashier/CashierOrders';
+import CashierPayments from './pages/Cashier/CashierPayments';
+import CashierReports from './pages/Cashier/CashierReports';
+
+
 import {jwtDecode} from 'jwt-decode';
 
 const App = () => {
@@ -77,7 +86,8 @@ const App = () => {
             }
           >
                 <Route index element={<TeamLeaderJobCards />} />
-                
+                <Route path="assign" element={<TeamLeaderAssign />} />
+                <Route path="jobcards-leader" element={<TeamLeaderJobCards />} />
           </Route>
 
           <Route 
@@ -90,7 +100,22 @@ const App = () => {
           >
                 <Route index element={<MechanicDashboard />} />
                 <Route path="dashboard" element={<MechanicDashboard />} />
-                <Route path="appointments" element={<MechanicDashboard />} />
+                <Route path="jobcards" element={<MechanicJobcards />} />
+          </Route>
+
+          <Route 
+            path='/cashier' 
+            element={
+              <PrivateRoute roles={['Cashier']}>
+                <CashierHome />
+              </PrivateRoute>
+            }
+          >
+                <Route index element={<CashierDashboard />} />
+                <Route path="dashboard" element={<CashierDashboard />} />
+                <Route path="orders" element={<CashierOrders />} />
+                <Route path="payments" element={<CashierPayments />} />
+                <Route path="reports" element={<CashierReports />} />
           </Route>
 
       </Routes>

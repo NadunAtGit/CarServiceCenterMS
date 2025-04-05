@@ -10,7 +10,7 @@ const adminRoutes=require("./routes/AdminRoute");
 const advisorRoutes=require("./routes/JobAdvisorRouter");
 const teamLeaderRoutes=require("./routes/TeamLeaderRoutes");
 const mechanicsRoutes=require("./routes/MechanicsRoute");
-
+const cashierRoutes=require("./routes/CashierRoute");
 
 const app = express();
 const cors = require("cors");
@@ -31,6 +31,7 @@ app.use("/api/admin",adminRoutes);
 app.use("/api/advisor",advisorRoutes);
 app.use("/api/teamleader",teamLeaderRoutes);
 app.use("/api/mechanic",mechanicsRoutes);
+app.use("/api/cashier",cashierRoutes);
 
 
 app._router.stack.forEach((r) => {

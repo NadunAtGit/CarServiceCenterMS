@@ -5,15 +5,64 @@ import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { CircularProgress } from "@mui/material";
 
-const AddJobCard = ({ onClose, getJobCards, appointmentId, getAppointments,recallCarousel }) => {
+const AddJobCard = ({ onClose, getJobCards, appointmentId, getAppointments, recallCarousel }) => {
   const [serviceDetails, setServiceDetails] = useState("");
   const [type, setType] = useState("");
+  const [serviceRecords, setServiceRecords] = useState([{ Description: "", ServiceType: "" }]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Validate if appointmentId exists
+  if (!appointmentId) {
+    return (
+      <div className="relative mx-auto bg-white rounded-lg p-6 max-w-xl shadow-lg top-40">
+        <button
+          className="absolute top-2 right-2 rounded-full bg-d9baf4 p-1 hover:bg-purple-400"
+          onClick={onClose}
+        >
+          <MdClose className="text-white" size={25} />
+        </button>
+        <div className="flex items-center flex-col gap-4 mb-6">
+          <h1 className="text-xl font-bold text-gray-800">Error</h1>
+          <p className="text-red-500">No appointment selected. Please select an appointment first.</p>
+          <button
+            className="bg-d9baf4 text-white py-2 px-6 rounded-lg hover:bg-purple-400 mt-4"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Add a new empty service record
+  const addServiceRecord = () => {
+    setServiceRecords([...serviceRecords, { Description: "", ServiceType: "" }]);
+  };
+
+  // Handle changes in service record input fields
+  const handleServiceRecordChange = (index, e) => {
+    const updatedRecords = [...serviceRecords];
+    updatedRecords[index][e.target.name] = e.target.value;
+    setServiceRecords(updatedRecords);
+  };
+
+  // Remove a service record
+  const removeServiceRecord = (index) => {
+    if (serviceRecords.length > 1) {
+      const updatedRecords = [...serviceRecords];
+      updatedRecords.splice(index, 1);
+      setServiceRecords(updatedRecords);
+    } else {
+      toast.info("At least one service record is required");
+    }
+  };
+
   const handleSubmit = async () => {
-    if (!serviceDetails || !type) {
-      setError("Please fill all required fields.");
+    // Modified validation to not include PartID
+    if (!serviceDetails || !type || serviceRecords.length === 0 || serviceRecords.some(record => !record.Description || !record.ServiceType)) {
+      setError("Please fill all required fields, including service records.");
       return;
     }
 
@@ -21,33 +70,56 @@ const AddJobCard = ({ onClose, getJobCards, appointmentId, getAppointments,recal
     setLoading(true);
 
     try {
+      console.log("Submitting job card for appointment:", appointmentId);
+      
+      // Add null PartID to each service record to handle the foreign key constraint
+      const serviceRecordsWithNullPartID = serviceRecords.map(record => ({
+        ...record,
+        PartID: null
+      }));
+      
+      console.log("Data being sent:", {
+        ServiceDetails: serviceDetails,
+        Type: type,
+        ServiceRecords: serviceRecordsWithNullPartID,
+      });
+
       const response = await axiosInstance.post(`/api/advisor/create-jobcard/${appointmentId}`, {
         ServiceDetails: serviceDetails,
         Type: type,
+        ServiceRecords: serviceRecordsWithNullPartID,
       });
 
       if (response.data.success) {
         toast.success("Job Card created successfully!");
-        getJobCards(); // Refresh job cards list
-        getAppointments(); // Refresh appointments list
-        onClose(); // Close the modal
+        
+        // Call all callback functions to refresh data
+        if (typeof getJobCards === 'function') getJobCards();
+        if (typeof getAppointments === 'function') getAppointments();
+        if (typeof recallCarousel === 'function') recallCarousel();
+        
+        // Close the modal after a short delay to allow the success toast to be seen
+        setTimeout(() => {
+          onClose();
+        }, 1500);
+      } else {
+        setError("Failed to create job card: " + (response.data.message || "Unknown error"));
+        toast.error("Error creating job card: " + (response.data.message || "Unknown error"));
       }
     } catch (error) {
       console.error("Error creating job card:", error);
-      setError("Failed to create job card. Please try again.");
-      toast.error("Error creating job card.");
+      const errorMessage = error.response?.data?.message || error.message || "Unknown error";
+      setError("Failed to create job card: " + errorMessage);
+      toast.error("Error creating job card: " + errorMessage);
     } finally {
       setLoading(false);
     }
   };
-  const handleClick = () => {
-    handleSubmit();
-    recallCarousel();
-  }
+
   return (
-    <div className="relative mx-auto bg-white rounded-lg p-6 max-w-xl shadow-lg top-40">
+    <div className="relative mx-auto bg-white rounded-lg p-6 max-w-xl shadow-lg">
       <button
-        className="absolute top-2 right-2 rounded-full bg-red-500 p-1 hover:bg-red-600"
+        className="absolute top-2 right-2 rounded-full bg-d9baf4 p-1 hover:bg-purple-400"
         onClick={onClose}
       >
         <MdClose className="text-white" size={25} />
@@ -55,40 +127,100 @@ const AddJobCard = ({ onClose, getJobCards, appointmentId, getAppointments,recal
 
       <div className="flex items-center flex-col gap-4 mb-6">
         <h1 className="text-xl font-bold text-gray-800">Create Job Card</h1>
+        <p className="text-gray-600 text-sm">Appointment ID: {appointmentId}</p>
       </div>
 
-      {error && <p className="text-red-500 text-sm mb-2">{error}</p>}
+      {error && <p className="text-red-500 text-sm mb-4 p-2 bg-red-50 rounded-md border border-red-200">{error}</p>}
 
       <div className="flex flex-col gap-4">
-        <textarea
-          className="text-md text-gray-900 border-2 p-2 rounded-xl border-red-500 w-full"
-          placeholder="Service Details"
-          value={serviceDetails}
-          onChange={(e) => setServiceDetails(e.target.value)}
-        />
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-gray-700">Service Details</label>
+          <textarea
+            className="text-md text-gray-900 border-2 p-2 rounded-xl border-d9baf4 w-full min-h-[100px]"
+            placeholder="Enter detailed description of the service required"
+            value={serviceDetails}
+            onChange={(e) => setServiceDetails(e.target.value)}
+          />
+        </div>
 
-        <select
-          className="text-md text-gray-900 border-2 p-2 rounded-xl border-red-500 w-full"
-          value={type}
-          onChange={(e) => setType(e.target.value)}
-        >
-          <option value="" disabled>
-            Select Service Type
-          </option>
-          <option value="Repair">Repair</option>
-          <option value="Maintenance">Maintenance</option>
-          <option value="Inspection">Inspection</option>
-        </select>
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-gray-700">Job Card Type</label>
+          <select
+            className="text-md text-gray-900 border-2 p-2 rounded-xl border-d9baf4 w-full"
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+          >
+            <option value="" disabled>Select Service Type</option>
+            <option value="Repair">Repair</option>
+            <option value="Maintenance">Maintenance</option>
+            <option value="Inspection">Inspection</option>
+          </select>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <label className="text-sm font-medium text-gray-700">Service Records</label>
+            <button
+              type="button"
+              className="text-blue-500 text-sm font-medium hover:text-blue-700 transition-colors"
+              onClick={addServiceRecord}
+            >
+              + Add Record
+            </button>
+          </div>
+          
+          {/* Added max height with overflow for scrolling when many records are added */}
+          <div className="max-h-60 overflow-y-auto pr-2">
+            {serviceRecords.map((record, index) => (
+              <div key={index} className="p-4 border border-gray-200 rounded-md bg-gray-50 mb-3">
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="text-md font-medium">Record #{index + 1}</h3>
+                  {serviceRecords.length > 1 && (
+                    <button
+                      type="button"
+                      className="text-red-500 text-sm hover:text-red-700"
+                      onClick={() => removeServiceRecord(index)}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 gap-3">
+                  <input
+                    className="text-md text-gray-900 border-2 p-2 rounded-xl border-d9baf4 w-full"
+                    type="text"
+                    placeholder="Description"
+                    name="Description"
+                    value={record.Description}
+                    onChange={(e) => handleServiceRecordChange(index, e)}
+                  />
+                  <select
+                    className="text-md text-gray-900 border-2 p-2 rounded-xl border-d9baf4 w-full"
+                    name="ServiceType"
+                    value={record.ServiceType}
+                    onChange={(e) => handleServiceRecordChange(index, e)}
+                  >
+                    <option value="" disabled>Select Service Type</option>
+                    <option value="Repair">Repair</option>
+                    <option value="Maintenance">Maintenance</option>
+                    <option value="Inspection">Inspection</option>
+                  </select>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
 
         <button
-          className="bg-red-500 text-white py-2 px-6 rounded-lg hover:bg-red-300"
-          onClick={handleClick}
+          className="bg-d9baf4 text-white py-3 px-6 rounded-lg hover:bg-purple-400 transition-colors mt-4 flex items-center justify-center"
+          onClick={handleSubmit}
           disabled={loading}
         >
           {loading ? <CircularProgress size={24} color="inherit" /> : "Create Job Card"}
         </button>
       </div>
-      <ToastContainer />
+      
+      <ToastContainer position="bottom-right" autoClose={3000} />
     </div>
   );
 };

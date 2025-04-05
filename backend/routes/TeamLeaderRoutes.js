@@ -50,7 +50,7 @@ router.get("/notworking-employees", authenticateToken, authorizeRoles(["Team Lea
         const todayDate = moment().format("YYYY-MM-DD"); // Get today's date
 
         const query = `
-            SELECT Employees.EmployeeID, Employees.Name, Employees.Email, Employees.Role, 
+            SELECT Employees.EmployeeID, Employees.Name, Employees.Email, Employees.Role,Employees.ProfilePicUrl, 
                    Attendances.Date, Attendances.Status, Attendances.ArrivalTime, Attendances.isWorking
             FROM Attendances
             JOIN Employees ON Attendances.EmployeeID = Employees.EmployeeID

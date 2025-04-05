@@ -581,7 +581,7 @@ router.get("/search-employee", async (req, res) => {
       console.error("Unexpected error in /search-employee:", error);
       return res.status(500).json({ error: true, message: "Something went wrong" });
     }
-  });
+});
   
   
   
