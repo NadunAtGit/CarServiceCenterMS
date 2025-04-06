@@ -1,7 +1,7 @@
 const express = require("express");
 const bcrypt = require("bcryptjs"); // ✅ Import bcrypt
 const db = require("../db");
-const {generateEmployeeId}=require("../GenerateId")
+const {generateEmployeeId,generateSupplierId}=require("../GenerateId")
 const { validateEmail, validatePhoneNumber } = require("../validations");
 const jwt = require("jsonwebtoken");
 const{authenticateToken,authorizeRoles}=require("../utilities");
@@ -582,6 +582,147 @@ router.get("/search-employee", async (req, res) => {
       return res.status(500).json({ error: true, message: "Something went wrong" });
     }
 });
+
+router.post("/addsupplier", authenticateToken, authorizeRoles(["Admin"]), async (req, res) => {
+    try {
+        const { Name, Email, Telephone, Address } = req.body;
+
+        // Input validation
+        if (!Name || !Email || !Telephone || !Address) {
+            return res.status(400).json({ message: "All fields are required" });
+        }
+
+        // Generate a new Supplier ID
+        const SupplierID = await generateSupplierId();
+
+        // Insert supplier details into the database
+        const query = `INSERT INTO suppliers (SupplierID, Name, Email, Telephone, Address)
+                       VALUES (?, ?, ?, ?, ?)`;
+
+        db.query(query, [SupplierID, Name, Email, Telephone, Address], (err, result) => {
+            if (err) {
+                return res.status(500).json({ message: "Error adding supplier", error: err });
+            }
+
+            res.status(201).json({ message: "Supplier added successfully", SupplierID });
+        });
+    } catch (error) {
+        console.error("Error in addsupplier route:", error);
+        res.status(500).json({ message: "Internal server error", error });
+    }
+});
+
+router.get("/getsuppliers", authenticateToken, authorizeRoles(["Admin","Cashier"]), async (req, res) => {
+    try {
+        const query = "SELECT * FROM Suppliers";
+
+        db.query(query, (err, results) => {
+            if (err) {
+                return res.status(500).json({ message: "Error fetching suppliers", error: err });
+            }
+
+            if (results.length === 0) {
+                return res.status(404).json({ message: "No suppliers found" });
+            }
+
+            res.status(200).json({
+                message: "Suppliers fetched successfully",
+                suppliers: results
+            });
+        });
+    } catch (error) {
+        console.error("Error in getsuppliers route:", error);
+        res.status(500).json({ message: "Internal server error", error });
+    }
+});
+
+router.get("/getsupplier/:id", authenticateToken, authorizeRoles(["Admin","Cashier"]), async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const query = "SELECT * FROM Suppliers WHERE SupplierID = ?";
+
+        db.query(query, [id], (err, results) => {
+            if (err) {
+                return res.status(500).json({ message: "Error fetching supplier", error: err });
+            }
+
+            if (results.length === 0) {
+                return res.status(404).json({ message: "Supplier not found" });
+            }
+
+            res.status(200).json({
+                message: "Supplier fetched successfully",
+                supplier: results[0]
+            });
+        });
+    } catch (error) {
+        console.error("Error in getsupplier route:", error);
+        res.status(500).json({ message: "Internal server error", error });
+    }
+});
+
+router.put("/updatesupplier/:id", authenticateToken, authorizeRoles(["Admin"]), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { Name, Email, Telephone, Address } = req.body;
+
+        // Input validation
+        if (!Name || !Email || !Telephone || !Address) {
+            return res.status(400).json({ message: "All fields are required" });
+        }
+
+        const query = `UPDATE Suppliers
+                       SET Name = ?, Email = ?, Telephone = ?, Address = ?
+                       WHERE SupplierID = ?`;
+
+        db.query(query, [Name, Email, Telephone, Address, id], (err, result) => {
+            if (err) {
+                return res.status(500).json({ message: "Error updating supplier", error: err });
+            }
+
+            if (result.affectedRows === 0) {
+                return res.status(404).json({ message: "Supplier not found" });
+            }
+
+            res.status(200).json({ message: "Supplier updated successfully" });
+        });
+    } catch (error) {
+        console.error("Error in updatesupplier route:", error);
+        res.status(500).json({ message: "Internal server error", error });
+    }
+});
+
+router.delete("/deletesupplier/:id", authenticateToken, authorizeRoles(["Admin"]), async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const query = "DELETE FROM Suppliers WHERE SupplierID = ?";
+
+        db.query(query, [id], (err, result) => {
+            if (err) {
+                return res.status(500).json({ message: "Error deleting supplier", error: err });
+            }
+
+            if (result.affectedRows === 0) {
+                return res.status(404).json({ message: "Supplier not found" });
+            }
+
+            res.status(200).json({ message: "Supplier deleted successfully" });
+        });
+    } catch (error) {
+        console.error("Error in deletesupplier route:", error);
+        res.status(500).json({ message: "Internal server error", error });
+    }
+});
+
+
+
+
+
+
+
+
   
   
   
