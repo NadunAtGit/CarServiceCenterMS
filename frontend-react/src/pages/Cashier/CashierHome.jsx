@@ -4,7 +4,8 @@ import { FaUserCircle, FaUserTie, FaRegAddressCard, FaClipboardList, FaPaperPlan
 import { MdSpaceDashboard, MdOutlineEventNote } from 'react-icons/md';
 import { Link, Outlet, useNavigate } from 'react-router-dom';
 import UserData from '../../components/UserData';
-import axiosInstance from '../../utils/AxiosInstance';
+import axiosInstance from '../../utils/axiosInstance';
+import { toast } from 'react-toastify';
 
 const CashierHome = () => {
     const [isOpen, setIsOpen] = useState(true);
@@ -17,6 +18,8 @@ const CashierHome = () => {
       { title: "Orders", icon: <FaUserTie size={26} />, path: "/cashier/orders" },
       { title: "Payments", icon: <MdOutlineEventNote size={26} />, path: "/cashier/payments" },
       { title: "Reports", icon: <FaClipboardList size={26} />, path: "/cashier/reports" },
+      { title: "Inventory", icon: <FaClipboardList size={26} />, path: "/cashier/inventory" },
+      { title: "Services", icon: <FaRegAddressCard size={26} />, path: "/cashier/services" },
       
     ];
   

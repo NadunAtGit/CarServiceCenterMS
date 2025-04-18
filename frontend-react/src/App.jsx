@@ -26,6 +26,8 @@ import CashierDashboard from './pages/Cashier/CashierDashboard';
 import CashierOrders from './pages/Cashier/CashierOrders';
 import CashierPayments from './pages/Cashier/CashierPayments';
 import CashierReports from './pages/Cashier/CashierReports';
+import CashierInventory from './pages/Cashier/CashierInventory';
+import CashierServices from './pages/Cashier/CashierServices';
 
 
 import {jwtDecode} from 'jwt-decode';
@@ -116,6 +118,8 @@ const App = () => {
                 <Route path="orders" element={<CashierOrders />} />
                 <Route path="payments" element={<CashierPayments />} />
                 <Route path="reports" element={<CashierReports />} />
+                <Route path="inventory" element={<CashierInventory />} />
+                <Route path="services" element={<CashierServices />} />
           </Route>
 
       </Routes>

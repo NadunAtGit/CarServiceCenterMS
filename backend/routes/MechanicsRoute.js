@@ -2,8 +2,9 @@ const express = require("express");
 const db = require("../db");
 const jwt = require("jsonwebtoken");
 const{authenticateToken,authorizeRoles}=require("../utilities");
-const{generateOrderId}=require("../GenerateId");
+const{generateOrderId,generateNotificationId}=require("../GenerateId");
 const moment = require("moment");
+const { messaging, bucket } = require("../firebaseConfig"); 
 
 const router = express.Router();
 
@@ -68,7 +69,6 @@ router.put("/update-status/:jobCardId", authenticateToken, authorizeRoles(["Mech
         });
     }
 });
-
 
 
 
@@ -148,15 +148,20 @@ router.put("/update-service-record-status/:serviceRecordId", authenticateToken, 
     const { EmployeeID } = req.user; // Mechanic's ID from authenticated user
 
     try {
-        // 1. Retrieve the JobCardID associated with the ServiceRecord_ID
+        // 1. Retrieve the JobCardID and related customer info associated with the ServiceRecord_ID
         const getJobCardQuery = `
-            SELECT JobCardID 
-            FROM ServiceRecords 
-            WHERE ServiceRecord_ID = ?
+            SELECT sr.JobCardID, j.Status as jobCardStatus, 
+                   c.CustomerID, c.FirebaseToken, e.Name as mechanicName
+            FROM ServiceRecords sr
+            JOIN JobCards j ON sr.JobCardID = j.JobCardID
+            JOIN Appointments a ON j.AppointmentID = a.AppointmentID
+            JOIN Customers c ON a.CustomerID = c.CustomerID
+            JOIN Employees e ON e.EmployeeID = ?
+            WHERE sr.ServiceRecord_ID = ?
         `;
         
         const jobCardResult = await new Promise((resolve, reject) => {
-            db.query(getJobCardQuery, [serviceRecordId], (err, result) => {
+            db.query(getJobCardQuery, [EmployeeID, serviceRecordId], (err, result) => {
                 if (err) return reject(err);
                 resolve(result);
             });
@@ -170,6 +175,10 @@ router.put("/update-service-record-status/:serviceRecordId", authenticateToken, 
         }
 
         const jobCardID = jobCardResult[0].JobCardID;
+        const customerId = jobCardResult[0].CustomerID;
+        const fcmToken = jobCardResult[0].FirebaseToken;
+        const mechanicName = jobCardResult[0].mechanicName;
+        const jobCardStatus = jobCardResult[0].jobCardStatus;
 
         // 2. Check if the mechanic is assigned to the job card in the Mechanics_Assigned table
         const assignmentCheckQuery = `
@@ -201,11 +210,69 @@ router.put("/update-service-record-status/:serviceRecordId", authenticateToken, 
             });
         });
 
+        // 4. Prepare and send notification to customer
+        const notificationTitle = 'Service Status Updated';
+        const notificationBody = `Mechanic ${mechanicName} updated status of service in job card #${jobCardID} to: ${status}`;
+        
+        let notificationSent = false;
+        
+        if (fcmToken) {
+            const notificationMessage = {
+                notification: {
+                    title: notificationTitle,
+                    body: notificationBody,
+                },
+                data: {
+                    jobCardID: jobCardID,
+                    serviceRecordId: serviceRecordId,
+                    type: 'service_status_update',
+                    status: status,
+                    updatedBy: EmployeeID
+                },
+                token: fcmToken,
+            };
+
+            try {
+                await messaging.send(notificationMessage);
+                notificationSent = true;
+            } catch (error) {
+                console.error("Error sending FCM notification:", error);
+            }
+        }
+
+        // 5. Store notification in database
+        const notificationID = await generateNotificationId();
+        await db.promise().query(
+            `INSERT INTO notifications 
+            (notification_id, CustomerID, title, message, notification_type, icon_type, color_code, is_read, created_at, metadata)
+            VALUES (?, ?, ?, ?, ?, ?, ?, FALSE, CURRENT_TIMESTAMP, ?)`,
+            [
+                notificationID,
+                customerId,
+                notificationTitle,
+                notificationBody,
+                'Service Status Update',
+                'build',
+                '#2196F3', // Blue color
+                JSON.stringify({ 
+                    jobCardID: jobCardID, 
+                    serviceRecordId: serviceRecordId,
+                    status: status,
+                    updatedBy: EmployeeID,
+                    mechanicName: mechanicName
+                })
+            ]
+        );
+
         return res.status(200).json({
             success: true,
             message: `Service record status updated to '${status}' successfully.`,
             serviceRecordId,
-            updatedBy: EmployeeID
+            updatedBy: EmployeeID,
+            notification: {
+                sent: notificationSent,
+                id: notificationID
+            }
         });
 
     } catch (error) {

@@ -244,6 +244,64 @@ const generateStockID = async () => {
     });
 };
 
+// Function to generate a unique ServiceID
+const generateServiceID = () => {
+    return new Promise((resolve, reject) => {
+        // Query the Services table to get the last ServiceID
+        const query = "SELECT ServiceID FROM Services ORDER BY ServiceID DESC LIMIT 1";
+
+        db.query(query, (err, result) => {
+            if (err) {
+                reject("Error generating ServiceID: " + err);
+            }
+
+            let newServiceID;
+            if (result.length > 0) {
+                // Extract the last ServiceID, e.g., 'S-0003'
+                const lastServiceID = result[0].ServiceID;
+                // Increment the numeric part of the ServiceID
+                const lastNumber = parseInt(lastServiceID.split('-')[1], 10);
+                const newNumber = (lastNumber + 1).toString().padStart(4, '0'); // Ensure 4 digits
+                newServiceID = `S-${newNumber}`;
+            } else {
+                // If no service exists, start with 'S-0001'
+                newServiceID = 'S-0001';
+            }
+
+            resolve(newServiceID);
+        });
+    });
+};
+
+const generateNotificationId = async () => {
+    return new Promise((resolve, reject) => {
+        const query = "SELECT notification_id FROM notifications ORDER BY notification_id DESC LIMIT 1";
+        
+        db.query(query, (err, result) => {
+            if (err) {
+                console.error("Error fetching last notification ID:", err);
+                return reject(err);
+            }
+            
+            console.log("DB Result for notification ID:", result); // Log to check the database result
+            
+            let newId;
+            if (result.length === 0 || !result[0].notification_id) {
+                newId = "N-0001"; // First notification entry
+            } else {
+                let lastId = result[0].notification_id; // Example: "N-0009"
+                let lastNum = parseInt(lastId.split("-")[1], 10) || 0; // Extract the number part
+                let nextNum = lastNum + 1;
+                newId = `N-${nextNum.toString().padStart(4, "0")}`; // Format like "N-0010"
+            }
+            
+            resolve(newId);
+        });
+    });
+};
+
+
+
 
 
 
@@ -260,7 +318,9 @@ module.exports = {
     generateOrderId,
     generateSupplierId,
     generatePartId,
-    generateStockID
+    generateStockID,
+    generateServiceID,
+    generateNotificationId
 };
 
 

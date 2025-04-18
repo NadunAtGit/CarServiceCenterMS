@@ -4,11 +4,12 @@ import axiosInstance from "../../utils/AxiosInstance";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { CircularProgress } from "@mui/material";
+import ServicesDropdown from "../INPUTS/ServicesDropdown";
 
 const AddJobCard = ({ onClose, getJobCards, appointmentId, getAppointments, recallCarousel }) => {
   const [serviceDetails, setServiceDetails] = useState("");
   const [type, setType] = useState("");
-  const [serviceRecords, setServiceRecords] = useState([{ Description: "", ServiceType: "" }]);
+  const [serviceRecords, setServiceRecords] = useState([{ Description: "", ServiceType: "", ServiceID: "" }]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -38,7 +39,7 @@ const AddJobCard = ({ onClose, getJobCards, appointmentId, getAppointments, reca
 
   // Add a new empty service record
   const addServiceRecord = () => {
-    setServiceRecords([...serviceRecords, { Description: "", ServiceType: "" }]);
+    setServiceRecords([...serviceRecords, { Description: "", ServiceType: "", ServiceID: "" }]);
   };
 
   // Handle changes in service record input fields
@@ -60,8 +61,9 @@ const AddJobCard = ({ onClose, getJobCards, appointmentId, getAppointments, reca
   };
 
   const handleSubmit = async () => {
-    // Modified validation to not include PartID
-    if (!serviceDetails || !type || serviceRecords.length === 0 || serviceRecords.some(record => !record.Description || !record.ServiceType)) {
+    // Modified validation to include ServiceID
+    if (!serviceDetails || !type || serviceRecords.length === 0 || 
+        serviceRecords.some(record => !record.Description || !record.ServiceType || !record.ServiceID)) {
       setError("Please fill all required fields, including service records.");
       return;
     }
@@ -185,34 +187,29 @@ const AddJobCard = ({ onClose, getJobCards, appointmentId, getAppointments, reca
                     </button>
                   )}
                 </div>
-                <div className="grid grid-cols-1 gap-3">
-                  <input
-                    className="text-md text-gray-900 border-2 p-2 rounded-xl border-d9baf4 w-full"
-                    type="text"
-                    placeholder="Description"
-                    name="Description"
-                    value={record.Description}
-                    onChange={(e) => handleServiceRecordChange(index, e)}
-                  />
-                  <select
-                    className="text-md text-gray-900 border-2 p-2 rounded-xl border-d9baf4 w-full"
-                    name="ServiceType"
-                    value={record.ServiceType}
-                    onChange={(e) => handleServiceRecordChange(index, e)}
-                  >
-                    <option value="" disabled>Select Service Type</option>
-                    <option value="Repair">Repair</option>
-                    <option value="Maintenance">Maintenance</option>
-                    <option value="Inspection">Inspection</option>
-                  </select>
-                </div>
+                
+                {/* Replace the input and select with ServicesDropdown */}
+                <ServicesDropdown 
+                  value={record.ServiceID}
+                  onChange={handleServiceRecordChange}
+                  index={index}
+                  required={true}
+                />
+                
+                {/* Display the selected service details (optional) */}
+                {record.Description && record.ServiceType && (
+                  <div className="mt-2 text-sm text-gray-600">
+                    <p><strong>Selected Service:</strong> {record.Description}</p>
+                    <p><strong>Service Type:</strong> {record.ServiceType}</p>
+                  </div>
+                )}
               </div>
             ))}
           </div>
         </div>
 
         <button
-          className="bg-d9baf4 text-white py-3 px-6 rounded-lg hover:bg-purple-400 transition-colors mt-4 flex items-center justify-center"
+          className="bg-purple-400  text-white py-3 px-6 rounded-lg hover:bg-d9baf4 transition-colors mt-4 flex items-center justify-center text-purple-400"
           onClick={handleSubmit}
           disabled={loading}
         >

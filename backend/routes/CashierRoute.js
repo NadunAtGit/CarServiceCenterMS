@@ -1,7 +1,7 @@
 const express = require("express");
 const bcrypt = require("bcryptjs"); // ✅ Import bcrypt
 const db = require("../db");
-const {generateEmployeeId,generatePartId,generateStockID}=require("../GenerateId")
+const {generateEmployeeId,generatePartId,generateStockID,generateServiceID}=require("../GenerateId")
 const { validateEmail, validatePhoneNumber } = require("../validations");
 const jwt = require("jsonwebtoken");
 const{authenticateToken,authorizeRoles}=require("../utilities");
@@ -352,6 +352,8 @@ router.post('/stocks/add', authenticateToken, authorizeRoles(["Admin", "Cashier"
 });
 
 
+
+
 router.get('/stocks', authenticateToken, authorizeRoles(["Admin", "Cashier"]), (req, res) => {
     const query = `
         SELECT s.StockID, s.Date, s.SupplierID, si.PartID, si.StockPrice, si.RetailPrice, si.Quantity
@@ -453,56 +455,293 @@ router.get('/stocks/:stockId', authenticateToken, authorizeRoles(["Admin", "Cash
 router.post('/stocks/:stockId/parts', authenticateToken, authorizeRoles(["Admin", "Cashier"]), async (req, res) => {
     const { stockId } = req.params;
     const { partId, StockPrice, RetailPrice, Quantity } = req.body;
-
-    // Ensure stockId exists in the Stock table
-    const stockCheckQuery = "SELECT * FROM Stock WHERE StockID = ?";
-    db.query(stockCheckQuery, [stockId], (err, stockResult) => {
-        if (err) {
-            console.error("Error checking StockID:", err);
-            return res.status(500).json({ message: "Error checking StockID", error: err });
-        }
-
-        if (stockResult.length === 0) {
-            return res.status(404).json({ message: "StockID not found in Stock table" });
-        }
-
-        // Ensure PartID exists in Parts table
-        const partCheckQuery = "SELECT * FROM Parts WHERE PartID = ?";
-        db.query(partCheckQuery, [partId], (err2, partResult) => {
-            if (err2) {
-                console.error("Error checking PartID:", err2);
-                return res.status(500).json({ message: "Error checking PartID", error: err2 });
+    
+    // Input validation
+    if (!stockId || !partId || !StockPrice || !RetailPrice || !Quantity) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Missing required fields", 
+        required: ['stockId', 'partId', 'StockPrice', 'RetailPrice', 'Quantity'] 
+      });
+    }
+    
+    // Validate numeric inputs
+    if (isNaN(parseFloat(StockPrice)) || isNaN(parseFloat(RetailPrice)) || isNaN(parseInt(Quantity))) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Price and quantity values must be numeric" 
+      });
+    }
+  
+    // Ensure positive values
+    if (parseFloat(StockPrice) < 0 || parseFloat(RetailPrice) < 0 || parseInt(Quantity) <= 0) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Price values cannot be negative and quantity must be positive" 
+      });
+    }
+    
+    try {
+      // Use promises for better error handling with database queries
+      const checkStockExists = () => {
+        return new Promise((resolve, reject) => {
+          const stockCheckQuery = "SELECT * FROM Stock WHERE StockID = ?";
+          db.query(stockCheckQuery, [stockId], (err, stockResult) => {
+            if (err) {
+              reject({ status: 500, message: "Error checking StockID", error: err });
+              return;
             }
-
-            if (partResult.length === 0) {
-                return res.status(404).json({ message: "PartID not found in Parts table" });
+            
+            if (stockResult.length === 0) {
+              reject({ status: 404, message: "StockID not found in Stock table" });
+              return;
             }
-
-            // If both stockId and partId exist, proceed with adding stock
-            const insertStockItemQuery = `
-                INSERT INTO StockItems (StockID, PartID, StockPrice, RetailPrice, Quantity)
-                VALUES (?, ?, ?, ?, ?)
-            `;
-            db.query(insertStockItemQuery, [stockId, partId, StockPrice, RetailPrice, Quantity], (err3, result3) => {
-                if (err3) {
-                    console.error("Error inserting stock item:", err3);
-                    return res.status(500).json({ message: "Error inserting stock item", error: err3 });
-                }
-
-                // Update Parts table Stock column
-                const updatePartsStockQuery = "UPDATE Parts SET Stock = Stock + ? WHERE PartID = ?";
-                db.query(updatePartsStockQuery, [Quantity, partId], (err4, result4) => {
-                    if (err4) {
-                        console.error("Error updating Parts stock:", err4);
-                        return res.status(500).json({ message: "Error updating Parts stock", error: err4 });
-                    }
-
-                    res.status(201).json({ message: "Stock item added successfully and Parts stock updated" });
-                });
-            });
+            
+            resolve(true);
+          });
         });
+      };
+      
+      const checkPartExists = () => {
+        return new Promise((resolve, reject) => {
+          const partCheckQuery = "SELECT * FROM Parts WHERE PartID = ?";
+          db.query(partCheckQuery, [partId], (err, partResult) => {
+            if (err) {
+              reject({ status: 500, message: "Error checking PartID", error: err });
+              return;
+            }
+            
+            if (partResult.length === 0) {
+              reject({ status: 404, message: "PartID not found in Parts table" });
+              return;
+            }
+            
+            resolve(true);
+          });
+        });
+      };
+      
+      const checkDuplicate = () => {
+        return new Promise((resolve, reject) => {
+          const duplicateCheckQuery = "SELECT * FROM StockItems WHERE StockID = ? AND PartID = ?";
+          db.query(duplicateCheckQuery, [stockId, partId], (err, result) => {
+            if (err) {
+              reject({ status: 500, message: "Error checking for duplicate entry", error: err });
+              return;
+            }
+            
+            if (result.length > 0) {
+              reject({ status: 409, message: "This part already exists in this stock. Please update the existing entry instead." });
+              return;
+            }
+            
+            resolve(true);
+          });
+        });
+      };
+      
+      const insertStockItem = () => {
+        return new Promise((resolve, reject) => {
+          const insertStockItemQuery = `
+            INSERT INTO StockItems (StockID, PartID, StockPrice, RetailPrice, Quantity)
+            VALUES (?, ?, ?, ?, ?)
+          `;
+          
+          db.query(insertStockItemQuery, [stockId, partId, StockPrice, RetailPrice, Quantity], (err, result) => {
+            if (err) {
+              reject({ status: 500, message: "Error inserting stock item", error: err });
+              return;
+            }
+            
+            resolve(result);
+          });
+        });
+      };
+      
+      const updatePartsStock = () => {
+        return new Promise((resolve, reject) => {
+          const updatePartsStockQuery = "UPDATE Parts SET Stock = Stock + ? WHERE PartID = ?";
+          db.query(updatePartsStockQuery, [Quantity, partId], (err, result) => {
+            if (err) {
+              reject({ status: 500, message: "Error updating Parts stock. Stock item was added but Parts stock was not updated.", error: err });
+              return;
+            }
+            
+            resolve(result);
+          });
+        });
+      };
+      
+      // Transaction-like operation sequence
+      try {
+        await checkStockExists();
+        await checkPartExists();
+        await checkDuplicate();
+        await insertStockItem();
+        await updatePartsStock();
+        
+        res.status(201).json({ 
+          success: true,
+          message: "Stock item added successfully and Parts stock updated" 
+        });
+      } catch (dbError) {
+        console.error("Database operation error:", dbError);
+        return res.status(dbError.status || 500).json({ 
+          success: false,
+          message: dbError.message, 
+          ...(dbError.error && { error: dbError.error.message || String(dbError.error) }) 
+        });
+      }
+    } catch (error) {
+      console.error("Unhandled error in stock parts route:", error);
+      return res.status(500).json({ 
+        success: false,
+        message: "An unexpected error occurred", 
+        error: error.message || String(error) 
+      });
+    }
+  });
+
+
+//not tested
+router.post('/services/add', authenticateToken, authorizeRoles(["Admin", "Cashier"]), async (req, res) => {
+    const { ServiceName, Description, Price, TypeService, Duration } = req.body;
+
+    if (!ServiceName || !Price || !TypeService || !Duration) {
+        return res.status(400).json({ message: "All fields except Description are required" });
+    }
+
+    try {
+        // Generate a unique ServiceID
+        const serviceId = await generateServiceID();
+
+        // Query to insert the new service
+        const query = `INSERT INTO Services (ServiceID, ServiceName, Description, Price, TypeService, Duration) 
+                       VALUES (?, ?, ?, ?, ?, ?)`;
+
+        db.query(query, [serviceId, ServiceName, Description, Price, TypeService, Duration], (err, result) => {
+            if (err) {
+                console.error("Error adding service:", err);
+                return res.status(500).json({ message: "Error adding service", error: err });
+            }
+
+            res.status(201).json({ message: "Service added successfully", serviceId });
+        });
+    } catch (error) {
+        console.error("Error generating ServiceID:", error);
+        return res.status(500).json({ message: "Internal server error", error });
+    }
+});
+
+router.put('/services/:serviceId', authenticateToken, authorizeRoles(["Admin", "Cashier"]), (req, res) => {
+    const { serviceId } = req.params;
+    const { ServiceName, Description, Price, TypeService, Duration } = req.body;
+
+    let updateQuery = "UPDATE Services SET ";
+    let params = [];
+    
+    if (ServiceName) {
+        updateQuery += "ServiceName = ?, ";
+        params.push(ServiceName);
+    }
+
+    if (Description) {
+        updateQuery += "Description = ?, ";
+        params.push(Description);
+    }
+
+    if (Price) {
+        updateQuery += "Price = ?, ";
+        params.push(Price);
+    }
+
+    if (TypeService) {
+        updateQuery += "TypeService = ?, ";
+        params.push(TypeService);
+    }
+
+    if (Duration) {
+        updateQuery += "Duration = ? ";
+        params.push(Duration);
+    }
+
+    // Remove the trailing comma and add the WHERE clause
+    updateQuery = updateQuery.trim().replace(/,$/, '') + " WHERE ServiceID = ?";
+    params.push(serviceId);
+
+    db.query(updateQuery, params, (err, result) => {
+        if (err) {
+            console.error("Error updating service:", err);
+            return res.status(500).json({ message: "Error updating service", error: err });
+        }
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: "Service not found" });
+        }
+
+        res.status(200).json({ message: "Service updated successfully" });
     });
 });
+
+
+router.get('/services', authenticateToken, authorizeRoles(["Admin", "Cashier","Service Advisor"]), (req, res) => {
+    const query = "SELECT * FROM Services";
+
+    db.query(query, (err, results) => {
+        if (err) {
+            console.error("Error fetching services:", err);
+            return res.status(500).json({ message: "Error fetching services", error: err });
+        }
+
+        if (results.length === 0) {
+            return res.status(404).json({ message: "No services found" });
+        }
+
+        res.status(200).json({ message: "Services fetched successfully", services: results });
+    });
+});
+
+router.get('/services/:serviceId', authenticateToken, authorizeRoles(["Admin", "Cashier"]), (req, res) => {
+    const { serviceId } = req.params;
+
+    const query = "SELECT * FROM Services WHERE ServiceID = ?";
+
+    db.query(query, [serviceId], (err, results) => {
+        if (err) {
+            console.error("Error fetching service:", err);
+            return res.status(500).json({ message: "Error fetching service", error: err });
+        }
+
+        if (results.length === 0) {
+            return res.status(404).json({ message: "Service not found" });
+        }
+
+        res.status(200).json({ message: "Service fetched successfully", service: results[0] });
+    });
+});
+
+router.delete('/services/:serviceId', authenticateToken, authorizeRoles(["Admin","Cashier"]), (req, res) => {
+    const { serviceId } = req.params;
+
+    const query = "DELETE FROM Services WHERE ServiceID = ?";
+
+    db.query(query, [serviceId], (err, result) => {
+        if (err) {
+            console.error("Error deleting service:", err);
+            return res.status(500).json({ message: "Error deleting service", error: err });
+        }
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: "Service not found" });
+        }
+
+        res.status(200).json({ message: "Service deleted successfully" });
+    });
+}); 
+
+
+
+
 
 
 

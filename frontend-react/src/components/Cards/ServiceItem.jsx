@@ -7,6 +7,7 @@ const ServiceItem = ({ service, onUpdateStatus, isUpdating, jobCardId }) => {
       case 'Not Started':
         return 'bg-gray-200 text-gray-700';
       case 'Started':
+        return 'bg-yellow-100 text-yellow-800';
       case 'Ongoing':
         return 'bg-yellow-100 text-yellow-800';
       case 'Finished':

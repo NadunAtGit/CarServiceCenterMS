@@ -5,7 +5,7 @@ const UserData = ({ username,role,imgUrl }) => {
   
   return (
     <div className='flex flex-col  items-center justify-center mt-5'>
-            <div className='w-40 h-40 rounded-full border-5 border-[#944ef8] my-1 overflow-hidden'>
+            <div className='w-30 h-30 rounded-full border-5 border-[#944ef8] my-1 overflow-hidden'>
                 <img src={imgUrl}  className='w-full h-full object-cover' alt="User profile"/>
             </div>
 

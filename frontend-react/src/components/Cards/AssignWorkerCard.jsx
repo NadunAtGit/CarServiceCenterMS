@@ -5,6 +5,7 @@ import AssignWorkersModal from "../Modals/AssignWorkersModal";
 
 const AssignWorkerCard = ({ job, onAssign }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const openModal = () => setIsModalOpen(true);
   const closeModal = () => setIsModalOpen(false);
@@ -15,15 +16,24 @@ const AssignWorkerCard = ({ job, onAssign }) => {
       <h2 className="text-lg font-semibold mb-2 flex items-center gap-2 text-left text-[#944EF8]">
         <FaClipboardList /> {job.JobCardID}
       </h2>
-      <p className="text-gray-700 flex items-center gap-2 text-left">
-        <FaTools className="text-green-500" />
-        {job.ServiceDetails}
-      </p>
+
+      {/* Service Details with truncation and expand */}
+      <div className="text-gray-700 flex items-start gap-2 text-left relative">
+        <FaTools className="text-green-500 mt-1" />
+        <div
+          className={`cursor-pointer ${isExpanded ? "" : "truncate"} max-w-[200px]`}
+          title={!isExpanded ? job.ServiceDetails : ""}
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
+          {job.ServiceDetails}
+        </div>
+      </div>
+
       <p className="text-gray-700 flex items-center gap-2 mt-2 text-left">
         <FaCheckCircle className="text-purple-500" />
         Type: {job.Type}
       </p>
-      
+
       {/* Assign Worker Button */}
       <div className="flex justify-center mt-4">
         <button
@@ -33,7 +43,7 @@ const AssignWorkerCard = ({ job, onAssign }) => {
           <FaUserPlus /> Assign Worker
         </button>
       </div>
-      
+
       {/* Modal */}
       <Modal
         isOpen={isModalOpen}

@@ -1,77 +1,33 @@
 import React, { useEffect, useState } from "react";
-import { FiSearch } from "react-icons/fi";
+import { FiSearch, FiCalendar } from "react-icons/fi";
 import axiosInstance from "../../utils/AxiosInstance";
 import AppointmentCard from "../../components/Cards/AppointmentCard";
 import Slider from "react-slick";
 import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 const AdminAppointments = () => {
   const [appointments, setAppointments] = useState([]);
+  const [filteredAppointments, setFilteredAppointments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [notConfirmed, setNotConfirmed] = useState([]);
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   const fetchAppointments = async () => {
     try {
       const response = await axiosInstance.get("api/appointments/get-all");
       if (response.data.success) {
         setAppointments(response.data.appointments);
+        setFilteredAppointments(response.data.appointments);
       } else {
         console.error("Failed to fetch appointments:", response.data.message);
       }
     } catch (error) {
       console.error("Error fetching appointments:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const searchAppointments = async () => {
-    if (!searchQuery.trim()) {
-      alert("Please enter a search term");
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const response = await axiosInstance.get(`api/appointments/search-appointment?query=${searchQuery}`);
-
-      if (response.data.success) {
-        setAppointments(response.data.results);
-      } else {
-        console.error("Search failed:", response.data.message);
-      }
-    } catch (error) {
-      console.error("Error searching appointments:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const deleteAppointment = async (id) => {
-    const confirmDelete = window.confirm(
-      "Are you sure you want to delete this appointment? This action cannot be undone."
-    );
-  
-    if (!confirmDelete) return;
-  
-    setIsLoading(true);
-  
-    try {
-      const response = await axiosInstance.delete(`api/appointments/delete-appointment/${id}`);
-  
-      if (response.data.success) {
-        setAppointments((prevAppointments) =>
-          prevAppointments.filter((appointment) => appointment.AppointmentID !== id)
-        );
-        alert("Appointment deleted successfully!");
-      } else {
-        alert("Failed to delete the appointment: " + response.data.message);
-      }
-    } catch (error) {
-      console.error("Error deleting appointment:", error);
-      alert("An error occurred while deleting the appointment.");
     } finally {
       setIsLoading(false);
     }
@@ -92,10 +48,89 @@ const AdminAppointments = () => {
     }
   };
 
+  const searchAppointments = async () => {
+    if (!searchQuery.trim() && !selectedDate) {
+      setFilteredAppointments(appointments);
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      let results = [...appointments];
+
+      // Apply search query filter
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        results = results.filter(appointment => 
+          (appointment.AppointmentID && appointment.AppointmentID.toString().toLowerCase().includes(query)) ||
+          (appointment.CustomerID && appointment.CustomerID.toString().toLowerCase().includes(query)) ||
+          (appointment.VehicleID && appointment.VehicleID.toLowerCase().includes(query)) ||
+          (appointment.Status && appointment.Status.toLowerCase().includes(query))
+        );
+      }
+
+      // Apply date filter
+      if (selectedDate) {
+        const filterDate = selectedDate.toISOString().split('T')[0];
+        results = results.filter(appointment => 
+          appointment.Date === filterDate
+        );
+      }
+
+      setFilteredAppointments(results);
+    } catch (error) {
+      console.error("Error searching appointments:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const deleteAppointment = async (id) => {
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete this appointment? This action cannot be undone."
+    );
+  
+    if (!confirmDelete) return;
+  
+    setIsLoading(true);
+  
+    try {
+      const response = await axiosInstance.delete(`api/appointments/delete-appointment/${id}`);
+  
+      if (response.data.success) {
+        setAppointments(prev => prev.filter(a => a.AppointmentID !== id));
+        setFilteredAppointments(prev => prev.filter(a => a.AppointmentID !== id));
+        alert("Appointment deleted successfully!");
+      } else {
+        alert("Failed to delete the appointment: " + response.data.message);
+      }
+    } catch (error) {
+      console.error("Error deleting appointment:", error);
+      alert("An error occurred while deleting the appointment.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDateChange = (date) => {
+    setSelectedDate(date);
+    setShowDatePicker(false);
+  };
+
+  const clearFilters = () => {
+    setSearchQuery("");
+    setSelectedDate(null);
+    setFilteredAppointments(appointments);
+  };
+
   useEffect(() => {
     fetchAppointments();
     fetchNotConfirmed();
   }, []);
+
+  useEffect(() => {
+    searchAppointments();
+  }, [selectedDate]);
 
   const settings = {
     dots: true,
@@ -157,18 +192,42 @@ const AdminAppointments = () => {
         )}
 
         {/* Search Section */}
-        <div className="w-full grid md:grid-cols-3 gap-3 mb-6">
-          <div className="col-span-full md:col-span-2 flex space-x-2">
+        <div className="w-full grid md:grid-cols-4 gap-3 mb-6">
+          <div className="col-span-full md:col-span-3 flex space-x-2">
             <div className="flex-grow relative">
               <input
                 type="text"
-                placeholder="Search by appointment ID, customer ID, or date"
+                placeholder="Search by ID, customer, vehicle, or status"
                 className="w-full bg-white/70 text-gray-800 outline-none border border-[#944EF8]/20 py-2 px-4 rounded-lg backdrop-blur-xl focus:ring-2 focus:ring-[#944EF8]/30 transition-all duration-300"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && searchAppointments()}
               />
               <FiSearch className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
             </div>
+            
+            {/* Date Filter */}
+            <div className="relative">
+              <button
+                className="flex items-center gap-2 px-4 py-2 h-full rounded-lg bg-white/70 text-gray-800 border border-[#944EF8]/20 hover:bg-[#944EF8]/10 transition-all duration-300"
+                onClick={() => setShowDatePicker(!showDatePicker)}
+              >
+                <FiCalendar size={20} />
+                {selectedDate ? selectedDate.toLocaleDateString() : "Filter by date"}
+              </button>
+              
+              {showDatePicker && (
+                <div className="absolute z-10 mt-1 bg-white rounded-lg shadow-lg border border-gray-200">
+                  <DatePicker
+                    selected={selectedDate}
+                    onChange={handleDateChange}
+                    inline
+                    className="border-none"
+                  />
+                </div>
+              )}
+            </div>
+
             <button
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-[#944EF8]/80 to-[#944EF8]/60 text-white border border-[#944EF8]/30 backdrop-blur-xl hover:from-[#944EF8]/90 hover:to-[#944EF8]/70 transition-all duration-300 shadow-md"
               onClick={searchAppointments}
@@ -177,6 +236,13 @@ const AdminAppointments = () => {
               Search
             </button>
           </div>
+          
+          <button
+            className="col-span-full md:col-span-1 px-4 py-2 rounded-lg bg-gray-200 text-gray-700 border border-gray-300 hover:bg-gray-300 transition-all duration-300"
+            onClick={clearFilters}
+          >
+            Clear Filters
+          </button>
         </div>
 
         <h1 className="text-2xl font-bold mb-6 text-gray-800">Appointment Data</h1>
@@ -201,8 +267,8 @@ const AdminAppointments = () => {
                 <tr>
                   <td colSpan="8" className="text-center py-4 text-gray-500">Loading...</td>
                 </tr>
-              ) : appointments.length > 0 ? (
-                appointments.map((appointment) => (
+              ) : filteredAppointments.length > 0 ? (
+                filteredAppointments.map((appointment) => (
                   <tr 
                     key={appointment.AppointmentID} 
                     className="border-b border-[#944EF8]/10 hover:bg-[#944EF8]/5 transition-colors"
@@ -227,7 +293,7 @@ const AdminAppointments = () => {
               ) : (
                 <tr>
                   <td colSpan="8" className="text-center py-4 text-gray-500">
-                    No appointments found.
+                    No appointments found matching your criteria.
                   </td>
                 </tr>
               )}
