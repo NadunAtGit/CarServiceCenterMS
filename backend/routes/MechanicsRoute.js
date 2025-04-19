@@ -285,17 +285,89 @@ router.put("/update-service-record-status/:serviceRecordId", authenticateToken, 
 });
 
 
+
+
+
+// router.post("/order-parts/:jobCardId", authenticateToken, authorizeRoles(["Mechanic"]), async (req, res) => {
+//     const { jobCardId } = req.params;
+//     const { parts } = req.body; // Expecting an array of { ServiceRecord_ID, PartID, Quantity }
+
+//     if (!parts || !Array.isArray(parts) || parts.length === 0) {
+//         return res.status(400).json({ message: "Please provide parts and their quantities." });
+//     }
+
+//     try {
+//         const jobCardQuery = "SELECT * FROM JobCards WHERE JobCardID = ?";
+//         db.query(jobCardQuery, [jobCardId], (err, result) => {
+//             if (err) {
+//                 return res.status(500).json({ message: "Error checking job card", error: err });
+//             }
+
+//             if (result.length === 0) {
+//                 return res.status(404).json({ message: "Job card not found." });
+//             }
+
+//             const serviceRecordsQuery = "SELECT * FROM ServiceRecords WHERE JobCardID = ? AND Status IN ('Not Started', 'Ongoing', 'Started','Finished')";
+
+//             db.query(serviceRecordsQuery, [jobCardId], (err, serviceRecords) => {
+//                 if (err) {
+//                     return res.status(500).json({ message: "Error fetching service records", error: err });
+//                 }
+
+//                 const validServiceRecords = serviceRecords.map(record => record.ServiceRecord_ID);
+//                 const invalidParts = parts.filter(part => !validServiceRecords.includes(part.ServiceRecord_ID));
+
+//                 if (invalidParts.length > 0) {
+//                     return res.status(400).json({ message: "Some service records are invalid for this job card.", invalidParts });
+//                 }
+
+//                 generateOrderId().then(orderId => {
+//                     const insertOrderQuery = `
+//                         INSERT INTO PartOrders (OrderID, JobCardID, RequestedBy, RequestedAt, OrderStatus)
+//                         VALUES (?, ?, ?, NOW(), 'Sent')`;
+
+//                     db.query(insertOrderQuery, [orderId, jobCardId, req.user.EmployeeID], (err, result) => {
+//                         if (err) {
+//                             return res.status(500).json({ message: "Error creating order", error: err });
+//                         }
+
+//                         const orderPartsValues = parts.map(part => [
+//                             orderId, part.ServiceRecord_ID, part.PartID, part.Quantity
+//                         ]);
+
+//                         const insertOrderPartsQuery = `
+//                             INSERT INTO Order_Parts (OrderID, ServiceRecordID, PartID, Quantity)
+//                             VALUES ?`;
+
+//                         db.query(insertOrderPartsQuery, [orderPartsValues], (err, result) => {
+//                             if (err) {
+//                                 return res.status(500).json({ message: "Error inserting order parts", error: err });
+//                             }
+
+//                             res.status(201).json({ message: "Order created successfully", orderId });
+//                         });
+//                     });
+//                 }).catch(error => {
+//                     return res.status(500).json({ message: "Error generating OrderID", error });
+//                 });
+//             });
+//         });
+//     } catch (error) {
+//         console.error("Error in order-parts route:", error);
+//         res.status(500).json({ message: "Internal server error", error });
+//     }
+// });
+
 router.post("/order-parts/:jobCardId", authenticateToken, authorizeRoles(["Mechanic"]), async (req, res) => {
     const { jobCardId } = req.params;
     const { parts } = req.body; // Expecting an array of { ServiceRecord_ID, PartID, Quantity }
 
-    // Validate that parts are provided
     if (!parts || !Array.isArray(parts) || parts.length === 0) {
         return res.status(400).json({ message: "Please provide parts and their quantities." });
     }
 
     try {
-        // Step 1: Check if the JobCardID exists
+        // Check job card exists
         const jobCardQuery = "SELECT * FROM JobCards WHERE JobCardID = ?";
         db.query(jobCardQuery, [jobCardId], (err, result) => {
             if (err) {
@@ -306,15 +378,14 @@ router.post("/order-parts/:jobCardId", authenticateToken, authorizeRoles(["Mecha
                 return res.status(404).json({ message: "Job card not found." });
             }
 
-            // Step 2: Validate the service records linked to the job card
-            const serviceRecordsQuery = "SELECT * FROM ServiceRecords WHERE JobCardID = ? AND Status IN ('Not Started', 'Ongoing', 'Started')";
+            // Check service records are valid
+            const serviceRecordsQuery = "SELECT * FROM ServiceRecords WHERE JobCardID = ? AND Status IN ('Not Started', 'Ongoing', 'Started','Finished')";
 
             db.query(serviceRecordsQuery, [jobCardId], (err, serviceRecords) => {
                 if (err) {
                     return res.status(500).json({ message: "Error fetching service records", error: err });
                 }
 
-                // Step 3: Check if each service record in the parts array exists in the service records
                 const validServiceRecords = serviceRecords.map(record => record.ServiceRecord_ID);
                 const invalidParts = parts.filter(part => !validServiceRecords.includes(part.ServiceRecord_ID));
 
@@ -322,55 +393,120 @@ router.post("/order-parts/:jobCardId", authenticateToken, authorizeRoles(["Mecha
                     return res.status(400).json({ message: "Some service records are invalid for this job card.", invalidParts });
                 }
 
-                // Step 4: Generate OrderID for the Part Order
-                generateOrderId().then(orderId => {
-                    // Step 5: Insert into PartOrders table with OrderStatus and RequestedBy as req.user.EmployeeID
-                    const insertOrderQuery = `
-                        INSERT INTO PartOrders (OrderID, JobCardID, RequestedBy, RequestedAt, OrderStatus)
-                        VALUES (?, ?, ?, NOW(), 'Sent')`;  // Set 'Sent' as default status (can be changed later)
+                // Check parts availability using batch tracking
+                const partAvailabilityChecks = [];
+                
+                // For each requested part, check availability across all batches
+                parts.forEach(part => {
+                    const availabilityQuery = `
+                        SELECT 
+                            p.PartID, 
+                            p.Name,
+                            SUM(sb.RemainingQuantity) AS AvailableQuantity
+                        FROM 
+                            Parts p
+                        LEFT JOIN 
+                            StockBatches sb ON p.PartID = sb.PartID AND sb.RemainingQuantity > 0
+                        WHERE 
+                            p.PartID = ?
+                        GROUP BY 
+                            p.PartID, p.Name`;
                     
-                    db.query(insertOrderQuery, [orderId, jobCardId, req.user.EmployeeID], (err, result) => {
-                        if (err) {
-                            return res.status(500).json({ message: "Error creating order", error: err });
-                        }
+                    partAvailabilityChecks.push(
+                        new Promise((resolve, reject) => {
+                            db.query(availabilityQuery, [part.PartID], (err, result) => {
+                                if (err) {
+                                    reject(err);
+                                    return;
+                                }
+                                
+                                const available = result[0]?.AvailableQuantity || 0;
+                                resolve({
+                                    ...part,
+                                    requested: part.Quantity,
+                                    available: available,
+                                    isAvailable: available >= part.Quantity,
+                                    partName: result[0]?.Name || 'Unknown Part'
+                                });
+                            });
+                        })
+                    );
+                });
 
-                        // Step 6: Insert each part and quantity into the Order_Parts table
-                        // Ensure that each part includes ServiceRecordID as well
-                        const orderPartsValues = parts.map(part => [
-                            orderId, part.ServiceRecord_ID, part.PartID, part.Quantity
-                        ]);
+                // Process all availability checks
+                Promise.all(partAvailabilityChecks)
+                    .then(availabilityResults => {
+                        // Check if any parts are unavailable
+                        const unavailableParts = availabilityResults.filter(part => !part.isAvailable);
+                        
+                        // Include availability information with the order
+                        const availabilityInfo = availabilityResults.map(part => ({
+                            PartID: part.PartID,
+                            ServiceRecord_ID: part.ServiceRecord_ID,
+                            requested: part.requested,
+                            available: part.available,
+                            partName: part.partName
+                        }));
 
-                        const insertOrderPartsQuery = `
-                            INSERT INTO Order_Parts (OrderID, ServiceRecordID, PartID, Quantity)
-                            VALUES ?`;
+                        // Generate order ID and create the order
+                        generateOrderId().then(orderId => {
+                            const insertOrderQuery = `
+                                INSERT INTO PartOrders (
+                                    OrderID, 
+                                    JobCardID, 
+                                    RequestedBy, 
+                                    RequestedAt, 
+                                    OrderStatus,
+                                    FulfillmentStatus,
+                                    Notes
+                                )
+                                VALUES (?, ?, ?, NOW(), 'Sent', 'Pending', ?)`;
 
-                        db.query(insertOrderPartsQuery, [orderPartsValues], (err, result) => {
-                            if (err) {
-                                return res.status(500).json({ message: "Error inserting order parts", error: err });
+                            // Add a note about unavailable parts if any
+                            let orderNotes = '';
+                            if (unavailableParts.length > 0) {
+                                orderNotes = `Warning: Some parts have insufficient stock. ${unavailableParts.map(p => 
+                                    `${p.partName}: requested ${p.requested}, available ${p.available}`).join('; ')}`;
                             }
 
-                            // Step 7: Insert into Order_ServiceRecords table to link parts with service records
-                            const orderServiceRecordsValues = parts.map(part => [
-                                orderId, part.ServiceRecord_ID
-                            ]);
-
-                            const insertOrderServiceRecordsQuery = `
-                                INSERT INTO Order_ServiceRecords (OrderID, ServiceRecordID)
-                                VALUES ?`;
-
-                            db.query(insertOrderServiceRecordsQuery, [orderServiceRecordsValues], (err, result) => {
+                            db.query(insertOrderQuery, [
+                                orderId, 
+                                jobCardId, 
+                                req.user.EmployeeID, 
+                                orderNotes
+                            ], (err, result) => {
                                 if (err) {
-                                    return res.status(500).json({ message: "Error linking order to service records", error: err });
+                                    return res.status(500).json({ message: "Error creating order", error: err });
                                 }
 
-                                // Step 8: Respond with success
-                                res.status(201).json({ message: "Order created successfully", orderId });
+                                const orderPartsValues = parts.map(part => [
+                                    orderId, part.ServiceRecord_ID, part.PartID, part.Quantity
+                                ]);
+
+                                const insertOrderPartsQuery = `
+                                    INSERT INTO Order_Parts (OrderID, ServiceRecordID, PartID, Quantity)
+                                    VALUES ?`;
+
+                                db.query(insertOrderPartsQuery, [orderPartsValues], (err, result) => {
+                                    if (err) {
+                                        return res.status(500).json({ message: "Error inserting order parts", error: err });
+                                    }
+
+                                    res.status(201).json({ 
+                                        message: "Order created successfully", 
+                                        orderId,
+                                        availability: availabilityInfo,
+                                        hasUnavailableParts: unavailableParts.length > 0
+                                    });
+                                });
                             });
+                        }).catch(error => {
+                            return res.status(500).json({ message: "Error generating OrderID", error });
                         });
+                    })
+                    .catch(error => {
+                        return res.status(500).json({ message: "Error checking parts availability", error });
                     });
-                }).catch(error => {
-                    return res.status(500).json({ message: "Error generating OrderID", error });
-                });
             });
         });
     } catch (error) {
@@ -378,6 +514,258 @@ router.post("/order-parts/:jobCardId", authenticateToken, authorizeRoles(["Mecha
         res.status(500).json({ message: "Internal server error", error });
     }
 });
+
+
+router.get("/check-part-availability/:partId", authenticateToken, authorizeRoles(["Admin", "Cashier", "Mechanic"]), async (req, res) => {
+    const { partId } = req.params;
+    const query = `
+        SELECT 
+            p.PartID, 
+            p.Name,
+            p.Stock,
+            SUM(sb.RemainingQuantity) AS TotalAvailable,
+            COUNT(DISTINCT sb.BatchID) AS BatchCount
+        FROM 
+            Parts p
+        LEFT JOIN 
+            StockBatches sb ON p.PartID = sb.PartID AND sb.RemainingQuantity > 0
+        WHERE 
+            p.PartID = ?
+        GROUP BY 
+            p.PartID, p.Name, p.Stock`;
+
+    db.query(query, [partId], (err, results) => {
+        if (err) return res.status(500).json({ message: "Error checking part availability", error: err });
+
+        if (results.length === 0) {
+            return res.status(404).json({ message: "Part not found" });
+        }
+
+        // Get batch details for FIFO information
+        const batchQuery = `
+            SELECT 
+                BatchID,
+                BatchNumber,
+                RemainingQuantity,
+                ReceiptDate,
+                ExpiryDate
+            FROM 
+                StockBatches 
+            WHERE 
+                PartID = ? AND RemainingQuantity > 0
+            ORDER BY 
+                ReceiptDate ASC`;  // FIFO order - oldest first
+
+        db.query(batchQuery, [partId], (err, batchResults) => {
+            if (err) return res.status(500).json({ message: "Error fetching batch details", error: err });
+
+            res.status(200).json({ 
+                part: results[0],
+                batches: batchResults,
+                isAvailable: (results[0].TotalAvailable > 0)
+            });
+        });
+    });
+});
+
+
+router.put("/finish-job/:JobCardID", authenticateToken, authorizeRoles(["Mechanic"]), async (req, res) => {
+    const { JobCardID } = req.params;
+    const mechanicId = req.user.EmployeeID;
+
+    try {
+        // Step 1: Check if the job card exists
+        const jobCardQuery = "SELECT * FROM JobCards WHERE JobCardID = ?";
+        
+        db.query(jobCardQuery, [JobCardID], (err, jobCardResult) => {
+            if (err) {
+                console.error("Error checking job card:", err);
+                return res.status(500).json({ 
+                    success: false, 
+                    message: "Error checking job card", 
+                    error: err 
+                });
+            }
+
+            if (jobCardResult.length === 0) {
+                return res.status(404).json({ 
+                    success: false, 
+                    message: "Job card not found" 
+                });
+            }
+
+            const jobCard = jobCardResult[0];
+
+            // Step 2: Check if the job card is already finished
+            if (jobCard.Status === 'Finished') {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: "Job card is already marked as finished" 
+                });
+            }
+
+            // Step 3: Check if all service records for this job card are completed
+            const serviceRecordsQuery = `
+                SELECT * FROM ServiceRecords 
+                WHERE JobCardID = ? AND Status != 'Finished'`;
+            
+            db.query(serviceRecordsQuery, [JobCardID], (err, incompleteServices) => {
+                if (err) {
+                    console.error("Error checking service records:", err);
+                    return res.status(500).json({ 
+                        success: false, 
+                        message: "Error checking service records", 
+                        error: err 
+                    });
+                }
+
+                // If there are any incomplete services, don't allow finishing the job card
+                if (incompleteServices.length > 0) {
+                    return res.status(400).json({ 
+                        success: false, 
+                        message: "Cannot finish job card. There are still unfinished services.", 
+                        incompleteServices: incompleteServices.map(service => service.ServiceRecord_ID) 
+                    });
+                }
+
+                // Step 4: Get all mechanics assigned to this job card
+                const getMechanicsQuery = `
+                    SELECT EmployeeID FROM mechanics_assigned 
+                    WHERE JobCardID = ?`;
+                
+                db.query(getMechanicsQuery, [JobCardID], (err, assignedMechanics) => {
+                    if (err) {
+                        console.error("Error fetching assigned mechanics:", err);
+                        return res.status(500).json({ 
+                            success: false, 
+                            message: "Error fetching assigned mechanics", 
+                            error: err 
+                        });
+                    }
+
+                    // Begin transaction to update job card and attendances
+                    db.beginTransaction(err => {
+                        if (err) {
+                            console.error("Error starting transaction:", err);
+                            return res.status(500).json({ 
+                                success: false, 
+                                message: "Error starting transaction", 
+                                error: err 
+                            });
+                        }
+
+                        // Step 5.1: Update job card status to 'Finished'
+                        const updateJobCardQuery = `
+                            UPDATE JobCards 
+                            SET Status = 'Finished'
+                            WHERE JobCardID = ?`;
+                        
+                        db.query(updateJobCardQuery, [JobCardID], (err, updateResult) => {
+                            if (err) {
+                                db.rollback(() => {
+                                    console.error("Error updating job card status:", err);
+                                    return res.status(500).json({ 
+                                        success: false, 
+                                        message: "Error updating job card status", 
+                                        error: err 
+                                    });
+                                });
+                                return;
+                            }
+
+                            // If no mechanics are assigned, just commit the transaction
+                            if (assignedMechanics.length === 0) {
+                                db.commit(err => {
+                                    if (err) {
+                                        db.rollback(() => {
+                                            console.error("Error committing transaction:", err);
+                                            return res.status(500).json({ 
+                                                success: false, 
+                                                message: "Error committing transaction", 
+                                                error: err 
+                                            });
+                                        });
+                                        return;
+                                    }
+
+                                    return res.status(200).json({ 
+                                        success: true, 
+                                        message: "Job card finished successfully. No mechanics were assigned.", 
+                                        jobCardId: JobCardID,
+                                        completedBy: mechanicId,
+                                        completedAt: new Date()
+                                    });
+                                });
+                                return;
+                            }
+
+                            // Get array of mechanic IDs
+                            const mechanicIds = assignedMechanics.map(mech => mech.EmployeeID);
+                            
+                            // Step 5.2: Update attendances table to set isWorking = 0 for all assigned mechanics
+                            const updateAttendancesQuery = `
+                                UPDATE attendances 
+                                SET isWorking = 0
+                                WHERE EmployeeID IN (?)`;
+                            
+                            db.query(updateAttendancesQuery, [mechanicIds], (err, attendancesResult) => {
+                                if (err) {
+                                    db.rollback(() => {
+                                        console.error("Error updating attendances:", err);
+                                        return res.status(500).json({ 
+                                            success: false, 
+                                            message: "Error updating attendances", 
+                                            error: err 
+                                        });
+                                    });
+                                    return;
+                                }
+
+                                // Commit the transaction
+                                db.commit(err => {
+                                    if (err) {
+                                        db.rollback(() => {
+                                            console.error("Error committing transaction:", err);
+                                            return res.status(500).json({ 
+                                                success: false, 
+                                                message: "Error committing transaction", 
+                                                error: err 
+                                            });
+                                        });
+                                        return;
+                                    }
+
+                                    // Success response
+                                    return res.status(200).json({ 
+                                        success: true, 
+                                        message: "Job card finished successfully and mechanics released", 
+                                        jobCardId: JobCardID,
+                                        completedBy: mechanicId,
+                                        completedAt: new Date(),
+                                        releasedMechanics: mechanicIds
+                                    });
+                                });
+                            });
+                        });
+                    });
+                });
+            });
+        });
+    } catch (error) {
+        console.error("Unhandled error in finish-job route:", error);
+        return res.status(500).json({ 
+            success: false, 
+            message: "Internal server error", 
+            error: error.message 
+        });
+    }
+});
+
+
+
+
+
+
 
 
 

@@ -368,7 +368,6 @@ router.get("/getjobcards/:vehicleno", authenticateToken, authorizeRoles(["Custom
 });
 
 
-
 router.get("/servicerecords/:jobcardid",authenticateToken, async (req, res) => {
     const jobCardId = req.params.jobcardid;
     // Get the job card ID from the request parameters

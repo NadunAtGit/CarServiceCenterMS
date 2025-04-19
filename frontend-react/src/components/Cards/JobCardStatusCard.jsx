@@ -1,12 +1,56 @@
-import React from 'react';
-import { FiTool, FiChevronRight } from 'react-icons/fi';
+import React, { useState } from 'react';
+import { FiTool, FiChevronRight, FiShoppingCart, FiCheckSquare } from 'react-icons/fi';
 import ServiceItem from './ServiceItem';
+import OrderPartsModal from '../Modals/OrderPartsModal';
+import AxiosInstance from '../../utils/axiosInstance';
 
 const JobCardStatusCard = ({ jobCard, onUpdateServiceStatus, isUpdating }) => {
+  const [showOrderPartsModal, setShowOrderPartsModal] = useState(false);
+  const [isOrderingParts, setIsOrderingParts] = useState(false);
+  const [isFinishingJobCard, setIsFinishingJobCard] = useState(false);
+
   // Calculate the number of completed services
   const completedServices = jobCard.Services.filter(s => s.Status === 'Finished').length;
   const progressPercentage = (completedServices / jobCard.Services.length) * 100;
   
+  // Check if all services are finished
+  const allServicesFinished = completedServices === jobCard.Services.length && jobCard.Services.length > 0;
+
+  const handleOrderParts = async (parts) => {
+    setIsOrderingParts(true);
+    try {
+      const response = await AxiosInstance.post(`/api/mechanic/order-parts/${jobCard.JobCardID}`, { parts });
+      
+      if (response.data) {
+        alert('Parts ordered successfully!');
+        setShowOrderPartsModal(false);
+      }
+    } catch (error) {
+      console.error('Error ordering parts:', error);
+      alert(error.response?.data?.message || 'Failed to order parts');
+    } finally {
+      setIsOrderingParts(false);
+    }
+  };
+
+  const handleFinishJobCard = async () => {
+    setIsFinishingJobCard(true);
+    try {
+      // Call API to update job card status to 'Completed'
+      const response = await AxiosInstance.put(`/api/mechanic/finish-job/${jobCard.JobCardID}`);
+      
+      if (response.data) {
+        alert('Job card completed successfully!');
+        // Optionally refresh the job card data or redirect
+      }
+    } catch (error) {
+      console.error('Error finishing job card:', error);
+      alert(error.response?.data?.message || 'Failed to finish job card');
+    } finally {
+      setIsFinishingJobCard(false);
+    }
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
       <div className="border-b p-4">
@@ -58,18 +102,44 @@ const JobCardStatusCard = ({ jobCard, onUpdateServiceStatus, isUpdating }) => {
               service={service}
               onUpdateStatus={onUpdateServiceStatus}
               isUpdating={isUpdating}
-              serviceRecordId={service.ServiceRecord_ID}  // Pass ServiceRecord_ID instead of JobCardID
-          />
+              serviceRecordId={service.ServiceRecord_ID}
+            />
           ))}
         </div>
       
-        <div className="mt-4 flex justify-end">
-          <button className="flex items-center text-sm px-4 py-2 rounded bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">
-            Order Parts
-            <FiChevronRight className="ml-1" />
-          </button>
+        <div className="mt-4 flex justify-end space-x-3">
+          {!allServicesFinished && (
+            <button 
+              onClick={() => setShowOrderPartsModal(true)}
+              className="flex items-center text-sm px-4 py-2 rounded bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+            >
+              <FiShoppingCart className="mr-2" />
+              Order Parts
+            </button>
+          )}
+          
+          {allServicesFinished && (
+            <button 
+              onClick={handleFinishJobCard}
+              disabled={isFinishingJobCard}
+              className="flex items-center text-sm px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700 transition-colors"
+            >
+              <FiCheckSquare className="mr-2" />
+              {isFinishingJobCard ? 'Finishing...' : 'Finish Job Card'}
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Order Parts Modal */}
+      {showOrderPartsModal && (
+        <OrderPartsModal
+          jobCard={jobCard}
+          onClose={() => setShowOrderPartsModal(false)}
+          onSubmit={handleOrderParts}
+          isSubmitting={isOrderingParts}
+        />
+      )}
     </div>
   );
 };

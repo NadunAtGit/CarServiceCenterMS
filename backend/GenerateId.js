@@ -301,6 +301,36 @@ const generateNotificationId = async () => {
 };
 
 
+const generateBatchID = () => {
+    return new Promise((resolve, reject) => {
+        // Query the StockBatches table to get the last BatchID
+        const query = "SELECT BatchID FROM StockBatches ORDER BY BatchID DESC LIMIT 1";
+
+        db.query(query, (err, result) => {
+            if (err) {
+                reject("Error generating BatchID: " + err);
+                return;
+            }
+
+            let newBatchID;
+            if (result.length > 0) {
+                // Extract the last BatchID, e.g., 'BAT-0003'
+                const lastBatchID = result[0].BatchID;
+                // Increment the numeric part of the BatchID
+                const lastNumber = parseInt(lastBatchID.split('-')[1], 10);
+                const newNumber = (lastNumber + 1).toString().padStart(4, '0'); // Ensure 4 digits
+                newBatchID = `BAT-${newNumber}`;
+            } else {
+                // If no batch exists, start with 'BAT-0001'
+                newBatchID = 'BAT-0001';
+            }
+
+            resolve(newBatchID);
+        });
+    });
+};
+
+
 
 
 
@@ -320,7 +350,8 @@ module.exports = {
     generatePartId,
     generateStockID,
     generateServiceID,
-    generateNotificationId
+    generateNotificationId,
+    generateBatchID
 };
 
 

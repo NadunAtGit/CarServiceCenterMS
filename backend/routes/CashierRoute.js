@@ -1,7 +1,7 @@
 const express = require("express");
 const bcrypt = require("bcryptjs"); // ✅ Import bcrypt
 const db = require("../db");
-const {generateEmployeeId,generatePartId,generateStockID,generateServiceID}=require("../GenerateId")
+const {generateEmployeeId,generatePartId,generateStockID,generateServiceID,generateBatchID}=require("../GenerateId")
 const { validateEmail, validatePhoneNumber } = require("../validations");
 const jwt = require("jsonwebtoken");
 const{authenticateToken,authorizeRoles}=require("../utilities");
@@ -25,9 +25,113 @@ router.use((req, res, next) => {
 });
 
 
+// router.put("/approveorder/:orderid", authenticateToken, authorizeRoles(["Cashier"]), async (req, res) => {
+//     const { orderid } = req.params;
+//     const cashierId = req.user.EmployeeID;  // Get the authenticated cashier's ID
+
+//     try {
+//         // Step 1: Check if the order exists
+//         const orderQuery = "SELECT * FROM PartOrders WHERE OrderID = ?";
+//         db.query(orderQuery, [orderid], (err, result) => {
+//             if (err) {
+//                 return res.status(500).json({ message: "Error checking order", error: err });
+//             }
+
+//             if (result.length === 0) {
+//                 return res.status(404).json({ message: "Order not found." });
+//             }
+
+//             const order = result[0];
+
+//             // Step 2: Check if the order is already approved or rejected
+//             if (order.OrderStatus === "Approved") {
+//                 return res.status(400).json({ message: "Order is already approved." });
+//             }
+//             if (order.OrderStatus === "Rejected") {
+//                 return res.status(400).json({ message: "Order is rejected and cannot be approved." });
+//             }
+
+//             // Step 3: Update the order status to 'Approved' and set ApprovedBy and ApprovedAt
+//             const approveOrderQuery = `
+//                 UPDATE PartOrders
+//                 SET OrderStatus = 'Approved', ApprovedBy = ?, ApprovedAt = NOW()
+//                 WHERE OrderID = ?`;
+
+//             db.query(approveOrderQuery, [cashierId, orderid], (err, result) => {
+//                 if (err) {
+//                     return res.status(500).json({ message: "Error approving the order", error: err });
+//                 }
+
+//                 // Step 4: Respond with success
+//                 res.status(200).json({ message: "Order approved successfully" });
+//             });
+//         });
+//     } catch (error) {
+//         console.error("Error in approveorder route:", error);
+//         res.status(500).json({ message: "Internal server error", error });
+//     }
+// });
 router.put("/approveorder/:orderid", authenticateToken, authorizeRoles(["Cashier"]), async (req, res) => {
     const { orderid } = req.params;
     const cashierId = req.user.EmployeeID;  // Get the authenticated cashier's ID
+
+    // Function to generate sequential LogIDs
+    const generateLogID = () => {
+        return new Promise((resolve, reject) => {
+            const query = "SELECT LogID FROM PartInventoryLogs ORDER BY LogID DESC LIMIT 1";
+
+            db.query(query, (err, result) => {
+                if (err) {
+                    reject("Error generating LogID: " + err);
+                    return;
+                }
+
+                let newLogID;
+                if (result.length > 0) {
+                    const lastLogID = result[0].LogID;
+                    const lastNumber = parseInt(lastLogID.split('-')[1], 10);
+                    const newNumber = (lastNumber + 1).toString().padStart(4, '0');
+                    newLogID = `LOG-${newNumber}`;
+                } else {
+                    newLogID = 'LOG-0001';
+                }
+
+                resolve(newLogID);
+            });
+        });
+    };
+
+    // Function to generate sequential FulfillmentIDs
+        // Track the last used ID within the current transaction
+let lastFulfillmentID = 0;
+
+const generateFulfillmentID = () => {
+    return new Promise((resolve, reject) => {
+        const query = "SELECT FulfillmentID FROM FulfilledOrderItems ORDER BY FulfillmentID DESC LIMIT 1";
+
+        db.query(query, (err, result) => {
+            if (err) {
+                reject("Error generating FulfillmentID: " + err);
+                return;
+            }
+
+            let newFulfillmentID;
+            if (result.length > 0) {
+                const lastLogID = result[0].FulfillmentID;
+                const lastNumber = parseInt(lastLogID.split('-')[1], 10);
+                const newNumber = (lastNumber + 1 + lastFulfillmentID).toString().padStart(4, '0');
+                newFulfillmentID = `FUL-${newNumber}`;
+            } else {
+                newFulfillmentID = `FUL-${(1 + lastFulfillmentID).toString().padStart(4, '0')}`;
+            }
+            
+            // Increment the counter for the next ID within this transaction
+            lastFulfillmentID++;
+            
+            resolve(newFulfillmentID);
+        });
+    });
+};
 
     try {
         // Step 1: Check if the order exists
@@ -43,27 +147,284 @@ router.put("/approveorder/:orderid", authenticateToken, authorizeRoles(["Cashier
 
             const order = result[0];
 
-            // Step 2: Check if the order is already approved or rejected
+            // Step 2: Check if the order is already approved, fulfilled, or rejected
             if (order.OrderStatus === "Approved") {
                 return res.status(400).json({ message: "Order is already approved." });
             }
             if (order.OrderStatus === "Rejected") {
                 return res.status(400).json({ message: "Order is rejected and cannot be approved." });
             }
+            if (order.FulfillmentStatus === "Fulfilled") {
+                return res.status(400).json({ message: "Order is already fulfilled." });
+            }
 
-            // Step 3: Update the order status to 'Approved' and set ApprovedBy and ApprovedAt
-            const approveOrderQuery = `
-                UPDATE PartOrders
-                SET OrderStatus = 'Approved', ApprovedBy = ?, ApprovedAt = NOW()
-                WHERE OrderID = ?`;
+            // Step 3: Get all parts in this order
+            const orderPartsQuery = `
+                SELECT op.*, p.Name as PartName 
+                FROM Order_Parts op
+                JOIN Parts p ON op.PartID = p.PartID
+                WHERE op.OrderID = ?`;
 
-            db.query(approveOrderQuery, [cashierId, orderid], (err, result) => {
+            db.query(orderPartsQuery, [orderid], (err, orderParts) => {
                 if (err) {
-                    return res.status(500).json({ message: "Error approving the order", error: err });
+                    return res.status(500).json({ message: "Error fetching order parts", error: err });
                 }
 
-                // Step 4: Respond with success
-                res.status(200).json({ message: "Order approved successfully" });
+                if (orderParts.length === 0) {
+                    return res.status(400).json({ message: "No parts found in this order." });
+                }
+
+                // Step 4: Check availability for all parts using FIFO
+                // We'll use a transaction to ensure all operations are atomic
+                db.beginTransaction(err => {
+                    if (err) {
+                        return res.status(500).json({ message: "Error starting transaction", error: err });
+                    }
+
+                    // Track parts with insufficient stock
+                    const insufficientParts = [];
+                    // Track fulfilled parts for logging
+                    const fulfilledParts = [];
+                    // Track generated fulfillment IDs
+                    const fulfillmentIDs = [];
+                    
+                    // Process each part in the order
+                    const processNextPart = (index) => {
+                        if (index >= orderParts.length) {
+                            // All parts processed, check if any had insufficient stock
+                            if (insufficientParts.length > 0) {
+                                // Some parts have insufficient stock, rollback and return error
+                                db.rollback(() => {
+                                    return res.status(400).json({ 
+                                        message: "Insufficient stock for some parts", 
+                                        insufficientParts 
+                                    });
+                                });
+                                return;
+                            }
+
+                            // All parts have sufficient stock, update order status
+                            const updateOrderQuery = `
+                                UPDATE PartOrders
+                                SET OrderStatus = 'Approved', 
+                                    ApprovedBy = ?, 
+                                    ApprovedAt = NOW(),
+                                    FulfillmentStatus = 'Fulfilled',
+                                    FulfilledBy = ?,
+                                    FulfilledAt = NOW(),
+                                    Notes = CONCAT(IFNULL(Notes, ''), ' Fulfilled using FIFO method.')
+                                WHERE OrderID = ?`;
+
+                            db.query(updateOrderQuery, [cashierId, cashierId, orderid], (err, result) => {
+                                if (err) {
+                                    db.rollback(() => {
+                                        return res.status(500).json({ message: "Error updating order status", error: err });
+                                    });
+                                    return;
+                                }
+
+                                // Generate fulfillment IDs for each fulfilled part
+                                const generateAllFulfillmentIDs = async () => {
+                                    try {
+                                        for (let i = 0; i < fulfilledParts.length; i++) {
+                                            const fulfillmentID = await generateFulfillmentID();
+                                            fulfillmentIDs.push(fulfillmentID);
+                                        }
+                                        return true;
+                                    } catch (error) {
+                                        return false;
+                                    }
+                                };
+
+                                generateAllFulfillmentIDs().then(success => {
+                                    if (!success) {
+                                        db.rollback(() => {
+                                            return res.status(500).json({ message: "Error generating fulfillment IDs" });
+                                        });
+                                        return;
+                                    }
+
+                                    // Create FulfilledOrderItems entries
+                                    const fulfillmentValues = fulfilledParts.map((part, index) => [
+                                        fulfillmentIDs[index],
+                                        orderid,
+                                        part.ServiceRecordID,
+                                        part.PartID,
+                                        part.BatchID,
+                                        part.RequestedQuantity,
+                                        part.FulfilledQuantity,
+                                        part.UnitPrice,
+                                        new Date().toISOString().slice(0, 19).replace('T', ' '), // Current timestamp
+                                        cashierId,
+                                        `Fulfilled using FIFO from batch ${part.BatchID}`
+                                    ]);
+
+                                    const insertFulfillmentQuery = `
+                                        INSERT INTO FulfilledOrderItems (
+                                            FulfillmentID, OrderID, ServiceRecordID, PartID, BatchID,
+                                            RequestedQuantity, FulfilledQuantity, UnitPrice, 
+                                            FulfillmentDate, FulfilledBy, Notes
+                                        )
+                                        VALUES ?`;
+
+                                    db.query(insertFulfillmentQuery, [fulfillmentValues], (err, result) => {
+                                        if (err) {
+                                            db.rollback(() => {
+                                                return res.status(500).json({ message: "Error recording fulfillment", error: err });
+                                            });
+                                            return;
+                                        }
+
+                                        // Commit the transaction
+                                        db.commit(err => {
+                                            if (err) {
+                                                db.rollback(() => {
+                                                    return res.status(500).json({ message: "Error committing transaction", error: err });
+                                                });
+                                                return;
+                                            }
+
+                                            // Success response
+                                            res.status(200).json({ 
+                                                message: "Order approved and fulfilled successfully using FIFO method",
+                                                fulfilledParts: fulfilledParts
+                                            });
+                                        });
+                                    });
+                                });
+                            });
+                            return;
+                        }
+
+                        const part = orderParts[index];
+                        const requiredQuantity = part.Quantity;
+
+                        // Get available batches for this part using FIFO (oldest first)
+                        const batchesQuery = `
+                            SELECT BatchID, PartID, BatchNumber, RemainingQuantity, CostPrice, RetailPrice, 
+                                   ReceiptDate, ManufacturingDate, ExpiryDate
+                            FROM StockBatches
+                            WHERE PartID = ? AND RemainingQuantity > 0
+                            ORDER BY ReceiptDate ASC, BatchID ASC`; // FIFO order - oldest first
+
+                        db.query(batchesQuery, [part.PartID], (err, batches) => {
+                            if (err) {
+                                db.rollback(() => {
+                                    return res.status(500).json({ message: "Error checking part batches", error: err });
+                                });
+                                return;
+                            }
+
+                            // Calculate total available quantity across all batches
+                            const totalAvailable = batches.reduce((sum, batch) => sum + batch.RemainingQuantity, 0);
+
+                            if (totalAvailable < requiredQuantity) {
+                                // Insufficient stock for this part
+                                insufficientParts.push({
+                                    PartID: part.PartID,
+                                    PartName: part.PartName,
+                                    Required: requiredQuantity,
+                                    Available: totalAvailable
+                                });
+                                processNextPart(index + 1);
+                                return;
+                            }
+
+                            // We have enough stock, allocate from batches using FIFO
+                            let remainingToFulfill = requiredQuantity;
+                            const currentDate = new Date().toISOString().slice(0, 19).replace('T', ' ');
+                            
+                            // Process each batch until the required quantity is fulfilled
+                            const processBatches = (batchIndex) => {
+                                if (batchIndex >= batches.length || remainingToFulfill <= 0) {
+                                    // Move to the next part
+                                    processNextPart(index + 1);
+                                    return;
+                                }
+
+                                const batch = batches[batchIndex];
+                                const quantityFromBatch = Math.min(batch.RemainingQuantity, remainingToFulfill);
+                                
+                                // Update the batch's remaining quantity
+                                const updateBatchQuery = `
+                                    UPDATE StockBatches
+                                    SET RemainingQuantity = RemainingQuantity - ?
+                                    WHERE BatchID = ?`;
+
+                                db.query(updateBatchQuery, [quantityFromBatch, batch.BatchID], (err, result) => {
+                                    if (err) {
+                                        db.rollback(() => {
+                                            return res.status(500).json({ message: "Error updating batch quantity", error: err });
+                                        });
+                                        return;
+                                    }
+
+                                    // Generate LogID using the sequential method
+                                    generateLogID().then(logID => {
+                                        // Log the inventory movement
+                                        const logQuery = `
+                                            INSERT INTO PartInventoryLogs (
+                                                LogID, PartID, StockItemID, BatchNumber, TransactionType,
+                                                Quantity, RemainingQuantity, UnitPrice, TransactionDate,
+                                                OrderID, JobCardID, EmployeeID, Notes
+                                            )
+                                            VALUES (?, ?, ?, ?, 'Issue', ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+                                        db.query(logQuery, [
+                                            logID,
+                                            part.PartID,
+                                            null, // StockItemID not relevant for issue
+                                            batch.BatchNumber,
+                                            quantityFromBatch,
+                                            batch.RemainingQuantity - quantityFromBatch,
+                                            batch.RetailPrice,
+                                            currentDate,
+                                            orderid,
+                                            order.JobCardID,
+                                            cashierId,
+                                            `Issued for order ${orderid} using FIFO method`
+                                        ], (err, result) => {
+                                            if (err) {
+                                                db.rollback(() => {
+                                                    return res.status(500).json({ message: "Error logging inventory movement", error: err });
+                                                });
+                                                return;
+                                            }
+
+                                            // Add to fulfilled parts for later recording
+                                            fulfilledParts.push({
+                                                PartID: part.PartID,
+                                                ServiceRecordID: part.ServiceRecordID,
+                                                BatchID: batch.BatchID,
+                                                BatchNumber: batch.BatchNumber,
+                                                RequestedQuantity: requiredQuantity,
+                                                FulfilledQuantity: quantityFromBatch,
+                                                UnitPrice: batch.RetailPrice,
+                                                ReceiptDate: batch.ReceiptDate
+                                            });
+
+                                            // Update remaining quantity to fulfill
+                                            remainingToFulfill -= quantityFromBatch;
+                                            
+                                            // Process next batch if needed
+                                            processBatches(batchIndex + 1);
+                                        });
+                                    }).catch(error => {
+                                        db.rollback(() => {
+                                            return res.status(500).json({ message: "Error generating LogID", error });
+                                        });
+                                    });
+                                });
+                            };
+
+                            // Start processing batches
+                            processBatches(0);
+                        });
+                    };
+
+                    // Start processing the first part
+                    processNextPart(0);
+                });
             });
         });
     } catch (error) {
@@ -71,6 +432,7 @@ router.put("/approveorder/:orderid", authenticateToken, authorizeRoles(["Cashier
         res.status(500).json({ message: "Internal server error", error });
     }
 });
+
 
 router.put("/rejectorder/:orderid", authenticateToken, authorizeRoles(["Cashier"]), async (req, res) => {
     const { orderid } = req.params;
@@ -193,10 +555,6 @@ router.get("/getorders-notapproved", authenticateToken, authorizeRoles(["Cashier
 });
 
 
-
-
-
-
 router.get("/getorders", authenticateToken, authorizeRoles(["Admin","Cashier"]), async (req, res) => {
     try {
         // Step 1: Log the request to see if it reaches the endpoint
@@ -232,6 +590,80 @@ router.get("/getorders", authenticateToken, authorizeRoles(["Admin","Cashier"]),
     }
 });
 
+
+router.get("/notapproved-orders", authenticateToken, authorizeRoles(["Admin", "Cashier"]), async (req, res) => {
+    try {
+        console.log("Fetching not-approved part orders...");
+
+        const getOrdersQuery = `
+            SELECT 
+                po.OrderID,
+                po.JobCardID,
+                po.RequestedBy,
+                po.RequestedAt,
+                po.OrderStatus,
+                op.ServiceRecordID,
+                op.PartID,
+                p.Name AS PartName,
+                op.Quantity
+            FROM 
+                PartOrders po
+            JOIN 
+                Order_Parts op ON po.OrderID = op.OrderID
+            JOIN 
+                Parts p ON op.PartID = p.PartID
+            WHERE 
+                po.OrderStatus = 'Sent'
+            ORDER BY 
+                po.OrderID
+        `;
+
+        db.query(getOrdersQuery, (err, results) => {
+            if (err) {
+                console.error("Database query error:", err);
+                return res.status(500).json({ message: "Error fetching orders", error: err });
+            }
+
+            if (results.length === 0) {
+                console.log("No not-approved orders found.");
+                return res.status(404).json({ message: "No orders found." });
+            }
+
+            // Grouping logic
+            const groupedOrders = {};
+            results.forEach(row => {
+                if (!groupedOrders[row.OrderID]) {
+                    groupedOrders[row.OrderID] = {
+                        OrderID: row.OrderID,
+                        JobCardID: row.JobCardID,
+                        RequestedBy: row.RequestedBy,
+                        RequestedAt: row.RequestedAt,
+                        OrderStatus: row.OrderStatus,
+                        Parts: []
+                    };
+                }
+
+                groupedOrders[row.OrderID].Parts.push({
+                    ServiceRecordID: row.ServiceRecordID,
+                    PartID: row.PartID,
+                    PartName: row.PartName,
+                    Quantity: row.Quantity
+                });
+            });
+
+            res.status(200).json({
+                message: "Orders fetched successfully",
+                orders: Object.values(groupedOrders)
+            });
+        });
+    } catch (error) {
+        console.error("Error in getorders route:", error);
+        res.status(500).json({ message: "Internal server error", error });
+    }
+});
+
+
+
 router.post("/addpart", authenticateToken, authorizeRoles(["Admin","Cashier"]), async (req, res) => {
     try {
         const { Name, Description } = req.body;
@@ -260,7 +692,7 @@ router.post("/addpart", authenticateToken, authorizeRoles(["Admin","Cashier"]), 
 
 
 
-router.get("/getparts", authenticateToken, authorizeRoles(["Admin","Cashier"]), async (req, res) => {
+router.get("/getparts", authenticateToken, authorizeRoles(["Admin","Cashier","Mechanic"]), async (req, res) => {
     const query = "SELECT * FROM Parts";
 
     db.query(query, (err, results) => {
@@ -270,7 +702,7 @@ router.get("/getparts", authenticateToken, authorizeRoles(["Admin","Cashier"]), 
     });
 });
 
-router.get("/getpart/:id", authenticateToken, authorizeRoles(["Admin","Cashier"]), async (req, res) => {
+router.get("/getpart/:id", authenticateToken, authorizeRoles(["Admin","Cashier","Mechanic"]), async (req, res) => {
     const partID = req.params.id;
     const query = "SELECT * FROM Parts WHERE PartID = ?";
 
@@ -350,8 +782,6 @@ router.post('/stocks/add', authenticateToken, authorizeRoles(["Admin", "Cashier"
         res.status(500).json({ message: "Internal server error", error });
     }
 });
-
-
 
 
 router.get('/stocks', authenticateToken, authorizeRoles(["Admin", "Cashier"]), (req, res) => {
@@ -452,9 +882,168 @@ router.get('/stocks/:stockId', authenticateToken, authorizeRoles(["Admin", "Cash
 });
 
 // Assuming you're using Express
+// router.post('/stocks/:stockId/parts', authenticateToken, authorizeRoles(["Admin", "Cashier"]), async (req, res) => {
+//     const { stockId } = req.params;
+//     const { partId, StockPrice, RetailPrice, Quantity } = req.body;
+    
+//     // Input validation
+//     if (!stockId || !partId || !StockPrice || !RetailPrice || !Quantity) {
+//       return res.status(400).json({ 
+//         success: false,
+//         message: "Missing required fields", 
+//         required: ['stockId', 'partId', 'StockPrice', 'RetailPrice', 'Quantity'] 
+//       });
+//     }
+    
+//     // Validate numeric inputs
+//     if (isNaN(parseFloat(StockPrice)) || isNaN(parseFloat(RetailPrice)) || isNaN(parseInt(Quantity))) {
+//       return res.status(400).json({ 
+//         success: false,
+//         message: "Price and quantity values must be numeric" 
+//       });
+//     }
+  
+//     // Ensure positive values
+//     if (parseFloat(StockPrice) < 0 || parseFloat(RetailPrice) < 0 || parseInt(Quantity) <= 0) {
+//       return res.status(400).json({ 
+//         success: false,
+//         message: "Price values cannot be negative and quantity must be positive" 
+//       });
+//     }
+    
+//     try {
+//       // Use promises for better error handling with database queries
+//       const checkStockExists = () => {
+//         return new Promise((resolve, reject) => {
+//           const stockCheckQuery = "SELECT * FROM Stock WHERE StockID = ?";
+//           db.query(stockCheckQuery, [stockId], (err, stockResult) => {
+//             if (err) {
+//               reject({ status: 500, message: "Error checking StockID", error: err });
+//               return;
+//             }
+            
+//             if (stockResult.length === 0) {
+//               reject({ status: 404, message: "StockID not found in Stock table" });
+//               return;
+//             }
+            
+//             resolve(true);
+//           });
+//         });
+//       };
+      
+//       const checkPartExists = () => {
+//         return new Promise((resolve, reject) => {
+//           const partCheckQuery = "SELECT * FROM Parts WHERE PartID = ?";
+//           db.query(partCheckQuery, [partId], (err, partResult) => {
+//             if (err) {
+//               reject({ status: 500, message: "Error checking PartID", error: err });
+//               return;
+//             }
+            
+//             if (partResult.length === 0) {
+//               reject({ status: 404, message: "PartID not found in Parts table" });
+//               return;
+//             }
+            
+//             resolve(true);
+//           });
+//         });
+//       };
+      
+//       const checkDuplicate = () => {
+//         return new Promise((resolve, reject) => {
+//           const duplicateCheckQuery = "SELECT * FROM StockItems WHERE StockID = ? AND PartID = ?";
+//           db.query(duplicateCheckQuery, [stockId, partId], (err, result) => {
+//             if (err) {
+//               reject({ status: 500, message: "Error checking for duplicate entry", error: err });
+//               return;
+//             }
+            
+//             if (result.length > 0) {
+//               reject({ status: 409, message: "This part already exists in this stock. Please update the existing entry instead." });
+//               return;
+//             }
+            
+//             resolve(true);
+//           });
+//         });
+//       };
+      
+//       const insertStockItem = () => {
+//         return new Promise((resolve, reject) => {
+//           const insertStockItemQuery = `
+//             INSERT INTO StockItems (StockID, PartID, StockPrice, RetailPrice, Quantity)
+//             VALUES (?, ?, ?, ?, ?)
+//           `;
+          
+//           db.query(insertStockItemQuery, [stockId, partId, StockPrice, RetailPrice, Quantity], (err, result) => {
+//             if (err) {
+//               reject({ status: 500, message: "Error inserting stock item", error: err });
+//               return;
+//             }
+            
+//             resolve(result);
+//           });
+//         });
+//       };
+      
+//       const updatePartsStock = () => {
+//         return new Promise((resolve, reject) => {
+//           const updatePartsStockQuery = "UPDATE Parts SET Stock = Stock + ? WHERE PartID = ?";
+//           db.query(updatePartsStockQuery, [Quantity, partId], (err, result) => {
+//             if (err) {
+//               reject({ status: 500, message: "Error updating Parts stock. Stock item was added but Parts stock was not updated.", error: err });
+//               return;
+//             }
+            
+//             resolve(result);
+//           });
+//         });
+//       };
+      
+//       // Transaction-like operation sequence
+//       try {
+//         await checkStockExists();
+//         await checkPartExists();
+//         await checkDuplicate();
+//         await insertStockItem();
+//         await updatePartsStock();
+        
+//         res.status(201).json({ 
+//           success: true,
+//           message: "Stock item added successfully and Parts stock updated" 
+//         });
+//       } catch (dbError) {
+//         console.error("Database operation error:", dbError);
+//         return res.status(dbError.status || 500).json({ 
+//           success: false,
+//           message: dbError.message, 
+//           ...(dbError.error && { error: dbError.error.message || String(dbError.error) }) 
+//         });
+//       }
+//     } catch (error) {
+//       console.error("Unhandled error in stock parts route:", error);
+//       return res.status(500).json({ 
+//         success: false,
+//         message: "An unexpected error occurred", 
+//         error: error.message || String(error) 
+//       });
+//     }
+//   });
+
 router.post('/stocks/:stockId/parts', authenticateToken, authorizeRoles(["Admin", "Cashier"]), async (req, res) => {
     const { stockId } = req.params;
-    const { partId, StockPrice, RetailPrice, Quantity } = req.body;
+    const { 
+        partId, 
+        StockPrice, 
+        RetailPrice, 
+        Quantity, 
+        BatchNumber, 
+        ManufacturingDate, 
+        ExpiryDate,
+        Notes 
+    } = req.body;
     
     // Input validation
     if (!stockId || !partId || !StockPrice || !RetailPrice || !Quantity) {
@@ -540,14 +1129,92 @@ router.post('/stocks/:stockId/parts', authenticateToken, authorizeRoles(["Admin"
         });
       };
       
+      // Generate a unique batch ID using your pattern
+      const generateBatchID = () => {
+        return new Promise((resolve, reject) => {
+            // Query the StockBatches table to get the last BatchID
+            const query = "SELECT BatchID FROM StockBatches ORDER BY BatchID DESC LIMIT 1";
+
+            db.query(query, (err, result) => {
+                if (err) {
+                    reject("Error generating BatchID: " + err);
+                    return;
+                }
+
+                let newBatchID;
+                if (result.length > 0) {
+                    // Extract the last BatchID, e.g., 'BAT-0003'
+                    const lastBatchID = result[0].BatchID;
+                    // Increment the numeric part of the BatchID
+                    const lastNumber = parseInt(lastBatchID.split('-')[1], 10);
+                    const newNumber = (lastNumber + 1).toString().padStart(4, '0'); // Ensure 4 digits
+                    newBatchID = `BAT-${newNumber}`;
+                } else {
+                    // If no batch exists, start with 'BAT-0001'
+                    newBatchID = 'BAT-0001';
+                }
+
+                resolve(newBatchID);
+            });
+        });
+      };
+      
+      // Generate a unique log ID for inventory tracking
+      const generateLogID = () => {
+        return new Promise((resolve, reject) => {
+            const query = "SELECT LogID FROM PartInventoryLogs ORDER BY LogID DESC LIMIT 1";
+
+            db.query(query, (err, result) => {
+                if (err) {
+                    reject("Error generating LogID: " + err);
+                    return;
+                }
+
+                let newLogID;
+                if (result.length > 0) {
+                    const lastLogID = result[0].LogID;
+                    const lastNumber = parseInt(lastLogID.split('-')[1], 10);
+                    const newNumber = (lastNumber + 1).toString().padStart(4, '0');
+                    newLogID = `LOG-${newNumber}`;
+                } else {
+                    newLogID = 'LOG-0001';
+                }
+
+                resolve(newLogID);
+            });
+        });
+      };
+      
+      // Insert into StockItems table
       const insertStockItem = () => {
         return new Promise((resolve, reject) => {
           const insertStockItemQuery = `
-            INSERT INTO StockItems (StockID, PartID, StockPrice, RetailPrice, Quantity)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO StockItems (
+              StockID, 
+              PartID, 
+              StockPrice, 
+              RetailPrice, 
+              Quantity, 
+              BatchNumber, 
+              ManufacturingDate, 
+              ExpiryDate, 
+              RemainingQuantity,
+              EntryDate
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
           `;
           
-          db.query(insertStockItemQuery, [stockId, partId, StockPrice, RetailPrice, Quantity], (err, result) => {
+          db.query(insertStockItemQuery, [
+            stockId, 
+            partId, 
+            StockPrice, 
+            RetailPrice, 
+            Quantity, 
+            BatchNumber || null, 
+            ManufacturingDate || null, 
+            ExpiryDate || null, 
+            Quantity
+          ], (err, result) => {
             if (err) {
               reject({ status: 500, message: "Error inserting stock item", error: err });
               return;
@@ -558,12 +1225,96 @@ router.post('/stocks/:stockId/parts', authenticateToken, authorizeRoles(["Admin"
         });
       };
       
+      // Insert into StockBatches table for FIFO tracking
+      const insertStockBatch = (batchId) => {
+        return new Promise((resolve, reject) => {
+          const insertBatchQuery = `
+            INSERT INTO StockBatches (
+              BatchID,
+              StockID,
+              PartID,
+              BatchNumber,
+              InitialQuantity,
+              RemainingQuantity,
+              CostPrice,
+              RetailPrice,
+              ManufacturingDate,
+              ExpiryDate,
+              ReceiptDate
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+          `;
+          
+          db.query(insertBatchQuery, [
+            batchId,
+            stockId,
+            partId,
+            BatchNumber || null,
+            Quantity,
+            Quantity,
+            StockPrice,
+            RetailPrice,
+            ManufacturingDate || null,
+            ExpiryDate || null
+          ], (err, result) => {
+            if (err) {
+              reject({ status: 500, message: "Error inserting stock batch", error: err });
+              return;
+            }
+            
+            resolve(result);
+          });
+        });
+      };
+      
+      // Log inventory transaction in PartInventoryLogs
+      const logInventoryTransaction = (batchId, logId) => {
+        return new Promise((resolve, reject) => {
+          const logQuery = `
+            INSERT INTO PartInventoryLogs (
+              LogID,
+              PartID,
+              StockItemID,
+              BatchNumber,
+              TransactionType,
+              Quantity,
+              RemainingQuantity,
+              UnitPrice,
+              TransactionDate,
+              EmployeeID,
+              Notes
+            )
+            VALUES (?, ?, ?, ?, 'Purchase', ?, ?, ?, NOW(), ?, ?)
+          `;
+          
+          db.query(logQuery, [
+            logId,
+            partId,
+            stockId,
+            BatchNumber || null,
+            Quantity,
+            Quantity,
+            StockPrice,
+            req.user.EmployeeID,
+            Notes || `Initial stock entry for batch ${batchId}`
+          ], (err, result) => {
+            if (err) {
+              reject({ status: 500, message: "Error logging inventory transaction", error: err });
+              return;
+            }
+            
+            resolve(result);
+          });
+        });
+      };
+      
+      // Update Parts table stock count
       const updatePartsStock = () => {
         return new Promise((resolve, reject) => {
           const updatePartsStockQuery = "UPDATE Parts SET Stock = Stock + ? WHERE PartID = ?";
           db.query(updatePartsStockQuery, [Quantity, partId], (err, result) => {
             if (err) {
-              reject({ status: 500, message: "Error updating Parts stock. Stock item was added but Parts stock was not updated.", error: err });
+              reject({ status: 500, message: "Error updating Parts stock.", error: err });
               return;
             }
             
@@ -577,12 +1328,35 @@ router.post('/stocks/:stockId/parts', authenticateToken, authorizeRoles(["Admin"
         await checkStockExists();
         await checkPartExists();
         await checkDuplicate();
+        
+        // Generate IDs for new records
+        const batchId = await generateBatchID();
+        const logId = await generateLogID();
+        
+        // Insert into StockItems (original table)
         await insertStockItem();
+        
+        // Insert into StockBatches (new batch tracking table)
+        await insertStockBatch(batchId);
+        
+        // Log the inventory transaction
+        await logInventoryTransaction(batchId, logId);
+        
+        // Update the Parts table stock count
         await updatePartsStock();
         
         res.status(201).json({ 
           success: true,
-          message: "Stock item added successfully and Parts stock updated" 
+          message: "Stock item added successfully with batch tracking",
+          data: {
+            stockId: stockId,
+            partId: partId,
+            batchId: batchId,
+            quantity: Quantity,
+            remainingQuantity: Quantity,
+            batchNumber: BatchNumber || null,
+            logId: logId
+          }
         });
       } catch (dbError) {
         console.error("Database operation error:", dbError);
@@ -600,7 +1374,8 @@ router.post('/stocks/:stockId/parts', authenticateToken, authorizeRoles(["Admin"
         error: error.message || String(error) 
       });
     }
-  });
+});
+
 
 
 //not tested

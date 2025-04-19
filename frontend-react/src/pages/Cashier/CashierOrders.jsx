@@ -27,9 +27,19 @@ const CashierOrders = () => {
 
   const fetchPendingApprovalOrders = async () => {
     try {
-      const response = await axiosInstance.get('api/cashier/getorders-notapproved');
+      const response = await axiosInstance.get('api/cashier/notapproved-orders');
       if (response.data.orders) {
-        setPendingApprovalOrders(response.data.orders);
+        // Transform the data to match the expected structure if needed
+        const transformedOrders = response.data.orders.map(order => ({
+          ...order,
+          // Add any necessary transformations here
+          // For example, if your OrderCarousel expects Services instead of Parts:
+          Services: [{
+            ServiceRecordID: order.Parts[0]?.ServiceRecordID || null,
+            Parts: order.Parts
+          }]
+        }));
+        setPendingApprovalOrders(transformedOrders);
       } else {
         console.error('Failed to fetch pending approval orders:', response.data.message);
       }
@@ -65,13 +75,10 @@ const CashierOrders = () => {
 
   const handleApproveOrder = async (orderId) => {
     try {
-      // API call to approve the order
       const response = await axiosInstance.put(`api/cashier/approve-order/${orderId}`);
       
       if (response.data.success) {
-        // Remove the approved order from pending list
         setPendingApprovalOrders(pendingApprovalOrders.filter(order => order.OrderID !== orderId));
-        // Refresh the orders list
         fetchOrders();
       } else {
         alert('Failed to approve order: ' + response.data.message);
@@ -84,13 +91,10 @@ const CashierOrders = () => {
 
   const handleRejectOrder = async (orderId) => {
     try {
-      // API call to reject the order
       const response = await axiosInstance.put(`api/cashier/reject-order/${orderId}`);
       
       if (response.data.success) {
-        // Remove the rejected order from pending list
         setPendingApprovalOrders(pendingApprovalOrders.filter(order => order.OrderID !== orderId));
-        // Refresh the orders list
         fetchOrders();
       } else {
         alert('Failed to reject order: ' + response.data.message);
@@ -102,10 +106,8 @@ const CashierOrders = () => {
   };
 
   const deleteOrder = async (orderId) => {
-    // Implement your delete functionality here
     if (window.confirm(`Are you sure you want to delete order ${orderId}?`)) {
       try {
-        // Example API call
         const response = await axiosInstance.delete(`api/orders/${orderId}`);
         if (response.data.success) {
           setOrders(orders.filter(order => order.OrderID !== orderId));
@@ -131,15 +133,21 @@ const CashierOrders = () => {
 
         {/* Pending Approval Orders Carousel */}
         <div className="mb-8">
+          <h2 className="text-xl font-semibold mb-4 text-gray-700">Pending Approval</h2>
           {isLoadingApproval ? (
             <div className="bg-white/70 rounded-lg p-6 backdrop-blur-xl text-center border border-[#944EF8]/20 shadow-md">
               <p className="text-gray-700">Loading pending approval orders...</p>
+            </div>
+          ) : pendingApprovalOrders.length === 0 ? (
+            <div className="bg-white/70 rounded-lg p-6 backdrop-blur-xl text-center border border-[#944EF8]/20 shadow-md">
+              <p className="text-gray-700">No orders pending approval</p>
             </div>
           ) : (
             <OrderCarousel 
               orders={pendingApprovalOrders} 
               onApprove={handleApproveOrder} 
               onReject={handleRejectOrder}
+              showJobCard={true} // Add this prop if you want to show JobCardID
             />
           )}
         </div>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import axiosInstance from '../../utils/axiosInstance'; // Adjust the import path as necessary
+import axiosInstance from '../../utils/AxiosInstance';
+import { toast } from 'react-toastify';
 
 const AddStockModal = ({ onClose, onStockAdded }) => {
   const [suppliers, setSuppliers] = useState([]);
