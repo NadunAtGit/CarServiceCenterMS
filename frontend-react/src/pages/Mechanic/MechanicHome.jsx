@@ -4,7 +4,8 @@ import { FaUserCircle, FaUserTie, FaRegAddressCard, FaClipboardList, FaPaperPlan
 import { MdSpaceDashboard, MdOutlineEventNote } from 'react-icons/md';
 import { Link, Outlet, useNavigate } from 'react-router-dom';
 import UserData from '../../components/UserData';
-import axiosInstance from '../../utils/AxiosInstance';
+import axiosInstance from '../../utils/axiosInstance';
+import { toast } from 'react-toastify';
 
 const MechanicHome = () => {
   const [isOpen, setIsOpen] = useState(true);

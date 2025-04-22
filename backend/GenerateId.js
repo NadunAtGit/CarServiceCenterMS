@@ -330,6 +330,35 @@ const generateBatchID = () => {
     });
 };
 
+const generateInvoiceID = () => {
+    return new Promise((resolve, reject) => {
+        // Query the Invoice table to get the last Invoice_ID
+        const query = "SELECT Invoice_ID FROM Invoice ORDER BY Invoice_ID DESC LIMIT 1";
+
+        db.query(query, (err, result) => {
+            if (err) {
+                reject("Error generating Invoice_ID: " + err);
+                return;
+            }
+
+            let newInvoiceID;
+            if (result.length > 0) {
+                // Extract the last Invoice_ID, e.g., 'I-0003'
+                const lastInvoiceID = result[0].Invoice_ID;
+                // Increment the numeric part of the Invoice_ID
+                const lastNumber = parseInt(lastInvoiceID.split('-')[1], 10);
+                const newNumber = (lastNumber + 1).toString().padStart(4, '0'); // Ensure 4 digits
+                newInvoiceID = `I-${newNumber}`;
+            } else {
+                // If no invoice exists, start with 'I-0001'
+                newInvoiceID = 'I-0001';
+            }
+
+            resolve(newInvoiceID);
+        });
+    });
+};
+
 
 
 
@@ -351,7 +380,8 @@ module.exports = {
     generateStockID,
     generateServiceID,
     generateNotificationId,
-    generateBatchID
+    generateBatchID,
+    generateInvoiceID
 };
 
 

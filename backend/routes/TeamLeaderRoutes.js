@@ -330,8 +330,8 @@ router.post("/assign-mechanics/:id", authenticateToken, authorizeRoles(["Team Le
         const notificationID = await generateNotificationId();
         await db.promise().query(
             `INSERT INTO notifications 
-            (notification_id, CustomerID, title, message, notification_type, icon_type, color_code, is_read, created_at, metadata)
-            VALUES (?, ?, ?, ?, ?, ?, ?, FALSE, CURRENT_TIMESTAMP, ?)`,
+            (notification_id, CustomerID, title, message, notification_type, icon_type, color_code, is_read, created_at, navigate_id,metadata)
+            VALUES (?, ?, ?, ?, ?, ?, ?, FALSE, CURRENT_TIMESTAMP, ?,?)`,
             [
                 notificationID,
                 customerId,
@@ -340,6 +340,7 @@ router.post("/assign-mechanics/:id", authenticateToken, authorizeRoles(["Team Le
                 'Mechanic Assignment',
                 'engineering',
                 '#4CAF50', // Green color
+                id,
                 JSON.stringify({ jobCardID: id, mechanics: validMechanics })
             ]
         );
@@ -359,6 +360,363 @@ router.post("/assign-mechanics/:id", authenticateToken, authorizeRoles(["Team Le
         return res.status(500).json({ error: true, message: "Server error" });
     }
 });
+
+router.get("/get-jobcards-created", authenticateToken, authorizeRoles(["Team Leader"]), async (req, res) => {
+    try {
+        // First query to get all job cards with status 'Created'
+        const jobCardsQuery = "SELECT * FROM JobCards WHERE Status = ? ORDER BY JobCardID DESC";
+        
+        const jobCards = await new Promise((resolve, reject) => {
+            db.query(jobCardsQuery, ["Created"], (err, result) => {
+                if (err) {
+                    console.error("Error fetching created job cards:", err);
+                    return reject(err);
+                }
+                resolve(result);
+            });
+        });
+
+        if (jobCards.length === 0) {
+            return res.status(200).json({
+                success: true,
+                jobCards: [],
+                count: 0
+            });
+        }
+
+        // Extract job card IDs for the second query
+        const jobCardIds = jobCards.map(jobCard => jobCard.JobCardID);
+        
+        // Second query to get all service records for these job cards
+        const serviceRecordsQuery = `
+            SELECT * FROM ServiceRecords 
+            WHERE JobCardID IN (?)
+            ORDER BY ServiceRecord_ID
+        `;
+        
+        const serviceRecords = await new Promise((resolve, reject) => {
+            db.query(serviceRecordsQuery, [jobCardIds], (err, result) => {
+                if (err) {
+                    console.error("Error fetching service records:", err);
+                    return reject(err);
+                }
+                resolve(result);
+            });
+        });
+        
+        // Group service records by job card ID
+        const jobCardsWithServiceRecords = jobCards.map(jobCard => {
+            const jobCardServiceRecords = serviceRecords.filter(
+                record => record.JobCardID === jobCard.JobCardID
+            );
+            
+            return {
+                ...jobCard,
+                ServiceRecords: jobCardServiceRecords
+            };
+        });
+
+        // Return the response
+        return res.status(200).json({
+            success: true,
+            jobCards: jobCardsWithServiceRecords,
+            count: jobCardsWithServiceRecords.length
+        });
+    } catch (error) {
+        console.error("Error in get-jobcards-created endpoint:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+});
+
+router.get("/get-jobcards-assigned", authenticateToken, authorizeRoles(["Team Leader"]), async (req, res) => {
+    try {
+        // First query to get all job cards with status 'Assigned'
+        const jobCardsQuery = "SELECT * FROM JobCards WHERE Status = ? ORDER BY JobCardID DESC";
+        
+        const jobCards = await new Promise((resolve, reject) => {
+            db.query(jobCardsQuery, ["Assigned"], (err, result) => {
+                if (err) {
+                    console.error("Error fetching assigned job cards:", err);
+                    return reject(err);
+                }
+                resolve(result);
+            });
+        });
+
+        if (jobCards.length === 0) {
+            return res.status(200).json({
+                success: true,
+                jobCards: [],
+                count: 0
+            });
+        }
+
+        // Extract job card IDs for the second query
+        const jobCardIds = jobCards.map(jobCard => jobCard.JobCardID);
+        
+        // Second query to get all service records for these job cards
+        const serviceRecordsQuery = `
+            SELECT * FROM ServiceRecords 
+            WHERE JobCardID IN (?)
+            ORDER BY ServiceRecord_ID
+        `;
+        
+        const serviceRecords = await new Promise((resolve, reject) => {
+            db.query(serviceRecordsQuery, [jobCardIds], (err, result) => {
+                if (err) {
+                    console.error("Error fetching service records:", err);
+                    return reject(err);
+                }
+                resolve(result);
+            });
+        });
+        
+        // Group service records by job card ID
+        const jobCardsWithServiceRecords = jobCards.map(jobCard => {
+            const jobCardServiceRecords = serviceRecords.filter(
+                record => record.JobCardID === jobCard.JobCardID
+            );
+            
+            return {
+                ...jobCard,
+                ServiceRecords: jobCardServiceRecords
+            };
+        });
+
+        // Return the response
+        return res.status(200).json({
+            success: true,
+            jobCards: jobCardsWithServiceRecords,
+            count: jobCardsWithServiceRecords.length
+        });
+    } catch (error) {
+        console.error("Error in get-jobcards-assigned endpoint:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+});
+
+router.get("/get-jobcards-ongoing", authenticateToken, authorizeRoles(["Team Leader"]), async (req, res) => {
+    try {
+        // First query to get all job cards with status 'Ongoing'
+        const jobCardsQuery = "SELECT * FROM JobCards WHERE Status = ? ORDER BY JobCardID DESC";
+        
+        const jobCards = await new Promise((resolve, reject) => {
+            db.query(jobCardsQuery, ["Ongoing"], (err, result) => {
+                if (err) {
+                    console.error("Error fetching ongoing job cards:", err);
+                    return reject(err);
+                }
+                resolve(result);
+            });
+        });
+
+        if (jobCards.length === 0) {
+            return res.status(200).json({
+                success: true,
+                jobCards: [],
+                count: 0
+            });
+        }
+
+        // Extract job card IDs for the second query
+        const jobCardIds = jobCards.map(jobCard => jobCard.JobCardID);
+        
+        // Second query to get all service records for these job cards
+        const serviceRecordsQuery = `
+            SELECT * FROM ServiceRecords 
+            WHERE JobCardID IN (?)
+            ORDER BY ServiceRecord_ID
+        `;
+        
+        const serviceRecords = await new Promise((resolve, reject) => {
+            db.query(serviceRecordsQuery, [jobCardIds], (err, result) => {
+                if (err) {
+                    console.error("Error fetching service records:", err);
+                    return reject(err);
+                }
+                resolve(result);
+            });
+        });
+        
+        // Group service records by job card ID
+        const jobCardsWithServiceRecords = jobCards.map(jobCard => {
+            const jobCardServiceRecords = serviceRecords.filter(
+                record => record.JobCardID === jobCard.JobCardID
+            );
+            
+            return {
+                ...jobCard,
+                ServiceRecords: jobCardServiceRecords
+            };
+        });
+
+        // Return the response
+        return res.status(200).json({
+            success: true,
+            jobCards: jobCardsWithServiceRecords,
+            count: jobCardsWithServiceRecords.length
+        });
+    } catch (error) {
+        console.error("Error in get-jobcards-ongoing endpoint:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+});
+
+router.get("/get-jobcards-finished", authenticateToken, authorizeRoles(["Team Leader"]), async (req, res) => {
+    try {
+        // First query to get all job cards with status 'Finished'
+        const jobCardsQuery = "SELECT * FROM JobCards WHERE Status = ? ORDER BY JobCardID DESC";
+        
+        const jobCards = await new Promise((resolve, reject) => {
+            db.query(jobCardsQuery, ["Finished"], (err, result) => {
+                if (err) {
+                    console.error("Error fetching finished job cards:", err);
+                    return reject(err);
+                }
+                resolve(result);
+            });
+        });
+
+        if (jobCards.length === 0) {
+            return res.status(200).json({
+                success: true,
+                jobCards: [],
+                count: 0
+            });
+        }
+
+        // Extract job card IDs for the second query
+        const jobCardIds = jobCards.map(jobCard => jobCard.JobCardID);
+        
+        // Second query to get all service records for these job cards
+        const serviceRecordsQuery = `
+            SELECT * FROM ServiceRecords 
+            WHERE JobCardID IN (?)
+            ORDER BY ServiceRecord_ID
+        `;
+        
+        const serviceRecords = await new Promise((resolve, reject) => {
+            db.query(serviceRecordsQuery, [jobCardIds], (err, result) => {
+                if (err) {
+                    console.error("Error fetching service records:", err);
+                    return reject(err);
+                }
+                resolve(result);
+            });
+        });
+        
+        // Group service records by job card ID
+        const jobCardsWithServiceRecords = jobCards.map(jobCard => {
+            const jobCardServiceRecords = serviceRecords.filter(
+                record => record.JobCardID === jobCard.JobCardID
+            );
+            
+            return {
+                ...jobCard,
+                ServiceRecords: jobCardServiceRecords
+            };
+        });
+
+        // Return the response
+        return res.status(200).json({
+            success: true,
+            jobCards: jobCardsWithServiceRecords,
+            count: jobCardsWithServiceRecords.length
+        });
+    } catch (error) {
+        console.error("Error in get-jobcards-finished endpoint:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+});
+
+router.get("/get-jobcards-invoicegenerated", authenticateToken, authorizeRoles(["Team Leader"]), async (req, res) => {
+    try {
+        // First query to get all job cards with status 'Finished'
+        const jobCardsQuery = "SELECT * FROM JobCards WHERE Status = ? ORDER BY JobCardID DESC";
+        
+        const jobCards = await new Promise((resolve, reject) => {
+            db.query(jobCardsQuery, ["Invoice Generated"], (err, result) => {
+                if (err) {
+                    console.error("Error fetching finished job cards:", err);
+                    return reject(err);
+                }
+                resolve(result);
+            });
+        });
+
+        if (jobCards.length === 0) {
+            return res.status(200).json({
+                success: true,
+                jobCards: [],
+                count: 0
+            });
+        }
+
+        // Extract job card IDs for the second query
+        const jobCardIds = jobCards.map(jobCard => jobCard.JobCardID);
+        
+        // Second query to get all service records for these job cards
+        const serviceRecordsQuery = `
+            SELECT * FROM ServiceRecords 
+            WHERE JobCardID IN (?)
+            ORDER BY ServiceRecord_ID
+        `;
+        
+        const serviceRecords = await new Promise((resolve, reject) => {
+            db.query(serviceRecordsQuery, [jobCardIds], (err, result) => {
+                if (err) {
+                    console.error("Error fetching service records:", err);
+                    return reject(err);
+                }
+                resolve(result);
+            });
+        });
+        
+        // Group service records by job card ID
+        const jobCardsWithServiceRecords = jobCards.map(jobCard => {
+            const jobCardServiceRecords = serviceRecords.filter(
+                record => record.JobCardID === jobCard.JobCardID
+            );
+            
+            return {
+                ...jobCard,
+                ServiceRecords: jobCardServiceRecords
+            };
+        });
+
+        // Return the response
+        return res.status(200).json({
+            success: true,
+            jobCards: jobCardsWithServiceRecords,
+            count: jobCardsWithServiceRecords.length
+        });
+    } catch (error) {
+        console.error("Error in get-jobcards-finished endpoint:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+});
+
+
 
 
 

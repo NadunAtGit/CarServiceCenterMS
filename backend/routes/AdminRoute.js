@@ -716,6 +716,70 @@ router.delete("/deletesupplier/:id", authenticateToken, authorizeRoles(["Admin"]
     }
 });
 
+// Add this to your backend API routes file
+// Add this to your AdminRoute.js file
+
+router.get("/filter-employees-by-role", authenticateToken, authorizeRoles(["Admin"]), async (req, res) => {
+    try {
+      const { role } = req.query;
+      
+      let query = "SELECT * FROM employees";
+      let params = [];
+      
+      if (role && role !== "") {
+        query += " WHERE Role = ?";
+        params.push(role);
+      }
+      
+      db.query(query, params, (err, result) => {
+        if (err) {
+          console.error("Database query error:", err);
+          return res.status(500).json({ error: true, message: "Internal server error" });
+        }
+        
+        return res.status(200).json({
+          success: true,
+          employees: result,
+        });
+      });
+      
+    } catch (error) {
+      console.error("Error filtering employees by role:", error);
+      return res.status(500).json({ error: true, message: "Something went wrong" });
+    }
+  });
+
+router.get("/get-employee/:id", authenticateToken, authorizeRoles(["Admin"]), async (req, res) => {
+    try {
+      const employeeId = req.params.id;
+      
+      const query = "SELECT * FROM employees WHERE EmployeeID = ? LIMIT 1";
+      
+      db.query(query, [employeeId], (err, result) => {
+        if (err) {
+          console.error("Database query error:", err);
+          return res.status(500).json({ success: false, message: "Internal server error" });
+        }
+        
+        if (result.length === 0) {
+          return res.status(404).json({ success: false, message: "Employee not found" });
+        }
+        
+        return res.status(200).json({
+          success: true,
+          employee: result[0],
+        });
+      });
+    } catch (error) {
+      console.error("Unexpected error in /get-employee/:id:", error);
+      return res.status(500).json({ success: false, message: "Something went wrong" });
+    }
+});
+
+
+
+
+
 
 
 

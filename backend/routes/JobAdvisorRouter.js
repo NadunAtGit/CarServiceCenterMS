@@ -126,8 +126,8 @@ router.post("/create-jobcard/:appointmentId", authenticateToken, authorizeRoles(
                                 const notificationID = await generateNotificationId();
                                 const insertNotificationQuery = `
                                     INSERT INTO notifications 
-                                    (notification_id, CustomerID, title, message, notification_type, icon_type, color_code, is_read, created_at)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, FALSE, CURRENT_TIMESTAMP)`;
+                                    (notification_id, CustomerID, title, message, notification_type, icon_type, color_code, is_read, created_at,navigate_id)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, FALSE, CURRENT_TIMESTAMP,?)`;
 
                                 await new Promise((resolve, reject) => {
                                     db.query(
@@ -139,7 +139,8 @@ router.post("/create-jobcard/:appointmentId", authenticateToken, authorizeRoles(
                                             notificationBody,
                                             'Job Card',          // Notification type
                                             'build',             // Icon type
-                                            '#f4cccc',           // Color code (light red/pink)
+                                            '#f4cccc',
+                                            jobCardID           // Color code (light red/pink)
                                         ],
                                         (err, result) => {
                                             if (err) {
@@ -183,6 +184,119 @@ router.post("/create-jobcard/:appointmentId", authenticateToken, authorizeRoles(
     } catch (error) {
         console.error("Error during job card creation:", error);
         return res.status(500).json({ error: true, message: "Server error" });
+    }
+});
+
+router.get("/jobcards", authenticateToken, authorizeRoles(["Service Advisor", "Cashier", "Mechanic", "Admin"]), async (req, res) => {
+    const query = "SELECT * FROM JobCards";
+
+    db.query(query, (err, results) => {
+        if (err) {
+            console.error("Error fetching job cards:", err);
+            return res.status(500).json({ error: true, message: "Database error" });
+        }
+
+        if (results.length === 0) {
+            return res.status(404).json({ error: true, message: "No job cards found" });
+        }
+
+        return res.status(200).json({ success: true, jobCards: results });
+    });
+});
+
+router.get("/finished-jobcards", authenticateToken, authorizeRoles(["Service Advisor", "Cashier", "Mechanic", "Admin"]), async (req, res) => {
+    try {
+        // 1. Get all finished job cards
+        const jobCards = await new Promise((resolve, reject) => {
+            db.query(
+                "SELECT * FROM JobCards WHERE Status = ?",
+                ["Finished"],
+                (err, results) => err ? reject(err) : resolve(results)
+            );
+        });
+
+        if (!jobCards.length) {
+            return res.status(404).json({ error: true, message: "No finished job cards found" });
+        }
+
+        // 2. For all job card IDs, fetch all service records and parts in one go
+        const jobCardIds = jobCards.map(jc => jc.JobCardID);
+        // Service records with price
+        const serviceRecords = await new Promise((resolve, reject) => {
+            db.query(
+                `SELECT sr.*, s.Price as ServicePrice
+                 FROM ServiceRecords sr
+                 LEFT JOIN Services s ON sr.Description = s.ServiceName OR sr.Description = s.Description
+                 WHERE sr.JobCardID IN (?)`,
+                [jobCardIds],
+                (err, results) => err ? reject(err) : resolve(results)
+            );
+        });
+
+        // Issued parts for each job card from PartInventoryLogs
+        const partsUsed = await new Promise((resolve, reject) => {
+            db.query(
+                `SELECT pl.JobCardID, pl.PartID, pl.BatchNumber, pl.Quantity, pl.UnitPrice, (pl.Quantity * pl.UnitPrice) as TotalPrice, p.Name as PartName
+                 FROM PartInventoryLogs pl
+                 JOIN Parts p ON pl.PartID = p.PartID
+                 WHERE pl.JobCardID IN (?) AND pl.TransactionType = 'Issue'`,
+                [jobCardIds],
+                (err, results) => err ? reject(err) : resolve(results)
+            );
+        });
+
+        // 3. Assemble the data for each job card
+        const jobCardsWithDetails = jobCards.map(jc => {
+            // Service records for this job card
+            const services = serviceRecords
+                .filter(sr => sr.JobCardID === jc.JobCardID)
+                .map(sr => ({
+                    serviceRecordId: sr.ServiceRecord_ID,
+                    description: sr.Description,
+                    serviceType: sr.ServiceType,
+                    status: sr.Status,
+                    cost: Number(sr.ServicePrice) || 0
+                }));
+
+            // Parts used for this job card
+            const parts = partsUsed
+                .filter(pu => pu.JobCardID === jc.JobCardID)
+                .map(pu => ({
+                    partId: pu.PartID,
+                    partName: pu.PartName,
+                    batchNumber: pu.BatchNumber,
+                    quantity: pu.Quantity,
+                    unitPrice: Number(pu.UnitPrice),
+                    totalPrice: Number(pu.TotalPrice)
+                }));
+
+            // Calculate total costs
+            const totalServiceCost = services.reduce((sum, s) => sum + s.cost, 0);
+            const totalPartsCost = parts.reduce((sum, p) => sum + p.totalPrice, 0);
+
+            return {
+                ...jc,
+                Services: services,
+                PartsUsed: parts,
+                totalServiceCost,
+                totalPartsCost,
+                totalCost: totalServiceCost + totalPartsCost
+            };
+        });
+
+        return res.status(200).json({
+            success: true,
+            jobCards: jobCardsWithDetails,
+            count: jobCardsWithDetails.length
+        });
+
+    } catch (error) {
+        console.error("Error fetching finished job cards with details:", error);
+        return res.status(500).json({
+            error: true,
+            message: "Internal server error",
+            details: error.message
+        });
     }
 });
 

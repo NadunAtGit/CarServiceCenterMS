@@ -168,7 +168,7 @@ router.post("/make-appointment", authenticateToken, async (req, res) => {
 
 
 //not tsted
-router.get("/get-not-confirmed", authenticateToken, authorizeRoles(['Admin']), async (req, res) => {
+router.get("/get-not-confirmed", authenticateToken, authorizeRoles(['Admin','Customer']), async (req, res) => {
     try {
         const query = `
             SELECT * 
@@ -197,8 +197,67 @@ router.get("/get-not-confirmed", authenticateToken, authorizeRoles(['Admin']), a
     }
 });
 
+router.get("/get-confirmed-user", authenticateToken, authorizeRoles(['Customer']), async (req, res) => {
+    try {
+        // Get the customer ID from the authenticated user object
+        const customerId = req.user.customerId;
+        
+        if (!customerId) {
+            return res.status(400).json({
+                success: false,
+                message: "Customer ID not found in authentication token"
+            });
+        }
 
-router.get("/get-all", authenticateToken,authorizeRoles(['Admin']), async (req, res) => {
+        const query = `
+            SELECT a.*, v.Model as VehicleModel 
+            FROM appointments a
+            LEFT JOIN Vehicles v ON a.VehicleID = v.VehicleNo
+            WHERE a.CustomerID = ? AND a.Status = 'Confirmed' 
+            ORDER BY a.Date ASC
+        `;
+        
+        const appointments = await new Promise((resolve, reject) => {
+            db.query(query, [customerId], (err, result) => {
+                if (err) {
+                    console.error("Error fetching confirmed appointments:", err);
+                    return reject(err);
+                }
+                resolve(result);
+            });
+        });
+
+        // Format dates for consistent JSON serialization
+        const formattedAppointments = appointments.map(appointment => {
+            // Convert date objects to ISO strings
+            if (appointment.AppointmentDate instanceof Date) {
+                appointment.AppointmentDate = appointment.AppointmentDate.toISOString();
+            }
+            if (appointment.AppointmentMadeDate instanceof Date) {
+                appointment.AppointmentMadeDate = appointment.AppointmentMadeDate.toISOString();
+            }
+            return appointment;
+        });
+
+        res.status(200).json({
+            success: true,
+            message: "Confirmed appointments retrieved successfully",
+            appointments: formattedAppointments,
+            count: formattedAppointments.length
+        });
+    } catch (error) {
+        console.error("Error fetching confirmed appointments:", error);
+        res.status(500).json({ 
+            success: false, 
+            message: "Error fetching confirmed appointments", 
+            error: error.message 
+        });
+    }
+});
+
+
+
+router.get("/get-all", authenticateToken,authorizeRoles(['Admin','Service Advisor']), async (req, res) => {
     try {
         const query = "SELECT * FROM appointments ORDER BY AppointmentMadeDate DESC";
 
@@ -313,8 +372,8 @@ router.put("/confirm-appointment/:id", authenticateToken, authorizeRoles(['Admin
                     const notificationID = await generateNotificationId();
                     const insertNotificationQuery = `
                         INSERT INTO notifications 
-                        (notification_id, CustomerID, title, message, notification_type, icon_type, color_code, is_read, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, FALSE, CURRENT_TIMESTAMP)`;
+                        (notification_id, CustomerID, title, message, notification_type, icon_type, color_code, is_read, created_at,navigate_id)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, FALSE, CURRENT_TIMESTAMP,?)`;
 
                     await new Promise((resolve, reject) => {
                         db.query(
@@ -324,9 +383,10 @@ router.put("/confirm-appointment/:id", authenticateToken, authorizeRoles(['Admin
                                 CustomerID,
                                 notificationTitle,
                                 notificationBody,
-                                'Appointment',
+                                'Appointment Confirmed',
                                 'event_available',
-                                '#4CAF50'
+                                '#4CAF50',
+                                id // navigate_id (AppointmentID)
                             ],
                             (err, result) => {
                                 if (err) {
@@ -372,7 +432,6 @@ router.put("/confirm-appointment/:id", authenticateToken, authorizeRoles(['Admin
         return res.status(500).json({ error: true, message: "Server error" });
     }
 });
-
 
 
 router.put("/not-confirm-appointment/:id", authenticateToken,authorizeRoles(['Admin']), async (req, res) => {

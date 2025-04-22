@@ -4,12 +4,22 @@ import { AiOutlineInfoCircle, AiOutlineDelete } from "react-icons/ai";
 import axiosInstance from '../../utils/AxiosInstance';
 import Modal from "react-modal";
 import AddEmployee from '../../components/Modals/AddEmployee';
+import EmployeeDataModal from '../../components/Modals/EmployeeDataModal'; // Make sure the path is correct
+
+// Initialize Modal
+Modal.setAppElement('#root'); // Make sure to set this to your app's root element
 
 const AdminEmployees = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [allEmployees, setAllEmployees] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRole, setSelectedRole] = useState("");
+
+  // State for managing employee detail modal
+  const [employeeDetailModal, setEmployeeDetailModal] = useState({
+    isOpen: false,
+    employeeId: null
+  });
 
   const [openAddModal, setOpenAddModal] = useState({
     isShown: false,
@@ -18,6 +28,22 @@ const AdminEmployees = () => {
 
   const onCloseAdd = () => {
     setOpenAddModal({ isShown: false, data: null });
+  };
+
+  // Function to open employee detail modal
+  const openEmployeeDetailModal = (employeeId) => {
+    setEmployeeDetailModal({
+      isOpen: true,
+      employeeId: employeeId
+    });
+  };
+
+  // Function to close employee detail modal
+  const closeEmployeeDetailModal = () => {
+    setEmployeeDetailModal({
+      isOpen: false,
+      employeeId: null
+    });
   };
 
   const getEmployeeData = async () => {
@@ -35,6 +61,27 @@ const AdminEmployees = () => {
     setIsLoading(false);
   };
 
+  const filterEmployeesByRole = async (role) => {
+    setIsLoading(true);
+    try {
+      const endpoint = role 
+        ? `api/admin/filter-employees-by-role?role=${role}`
+        : "api/admin/all-employees";
+        
+      const response = await axiosInstance.get(endpoint);
+      
+      if (response.data.success) {
+        setAllEmployees(response.data.employees);
+      } else {
+        console.error("Failed to filter employees:", response.data.message);
+      }
+    } catch (error) {
+      console.error("Error filtering employees:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const searchEmployees = async () => {
     if (!searchQuery.trim()) {
       alert("Please enter a search term");
@@ -43,7 +90,12 @@ const AdminEmployees = () => {
 
     setIsLoading(true);
     try {
-      const response = await axiosInstance.get(`api/admin/search-employee?query=${searchQuery}`);
+      let endpoint = `api/admin/search-employee?query=${searchQuery}`;
+      if (selectedRole) {
+        endpoint += `&role=${selectedRole}`;
+      }
+      
+      const response = await axiosInstance.get(endpoint);
 
       if (response.data.success) {
         setAllEmployees(response.data.results);
@@ -86,23 +138,23 @@ const AdminEmployees = () => {
     }
   };
 
+  // Handle role change
+  const handleRoleChange = (e) => {
+    const role = e.target.value;
+    setSelectedRole(role);
+    filterEmployeesByRole(role);
+  };
+
   useEffect(() => {
     getEmployeeData();
   }, []);
 
-  // Filter employees based on search query and selected role
-  const filteredEmployees = allEmployees.filter((employee) => {
-    const matchesSearchQuery =
-      employee.Name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      employee.EmployeeID.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      employee.Role.toLowerCase().includes(searchQuery.toLowerCase());
-
-    const matchesRoleFilter = selectedRole
-      ? employee.Role === selectedRole
-      : true;
-
-    return matchesSearchQuery && matchesRoleFilter;
-  });
+  // Reset filters function
+  const resetFilters = () => {
+    setSelectedRole("");
+    setSearchQuery("");
+    getEmployeeData();
+  };
 
   return (
     <div className="container mx-auto px-4 py-6 bg-[#D8D8D8] min-h-screen">
@@ -134,18 +186,28 @@ const AdminEmployees = () => {
             </button>
           </div>
           
-          <div>
+          <div className="flex gap-2">
             <select
               className="w-full bg-white/50 text-gray-800 border border-[#944EF8]/20 py-2 px-4 rounded-lg backdrop-blur-xl shadow-sm"
               value={selectedRole}
-              onChange={(e) => setSelectedRole(e.target.value)}
+              onChange={handleRoleChange}
             >
               <option value="" className="bg-white">Filter by Role</option>
-              <option value="Mechanics" className="bg-white">Mechanics</option>
-              <option value="Advisors" className="bg-white">Advisors</option>
-              <option value="Admins" className="bg-white">Admins</option>
-              <option value="Team Leaders" className="bg-white">Team Leaders</option>
+              <option value="Mechanic" className="bg-white">Mechanics</option>
+              <option value="Advisor" className="bg-white">Advisors</option>
+              <option value="Admin" className="bg-white">Admins</option>
+              <option value="Team Leader" className="bg-white">Team Leaders</option>
             </select>
+            
+            {(selectedRole || searchQuery) && (
+              <button
+                onClick={resetFilters}
+                className="px-3 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 transition-colors text-gray-700 border border-gray-300"
+                title="Reset filters"
+              >
+                <FiRefreshCcw size={20} />
+              </button>
+            )}
           </div>
         </div>
 
@@ -163,8 +225,8 @@ const AdminEmployees = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredEmployees.length > 0 ? (
-                filteredEmployees.map((employee) => (
+              {allEmployees.length > 0 ? (
+                allEmployees.map((employee) => (
                   <tr key={employee.EmployeeID} className="border-b border-[#944EF8]/10 hover:bg-[#944EF8]/5 transition-colors">
                     <td className="py-3 px-4 hidden md:table-cell text-gray-700">{employee.EmployeeID}</td>
                     <td className="py-3 px-4 text-gray-800 font-medium">{employee.Name}</td>
@@ -172,7 +234,11 @@ const AdminEmployees = () => {
                     <td className="py-3 px-4 text-gray-700">{employee.Role}</td>
                     <td className="py-3 px-4 text-center hidden md:table-cell text-gray-700">{employee.Rating}</td>
                     <td className="py-3 px-4 flex gap-3 items-center">
-                      <AiOutlineInfoCircle className="text-[#944EF8] cursor-pointer hover:text-[#7a3dd0] transition-colors" size={22} />
+                      <AiOutlineInfoCircle 
+                        className="text-[#944EF8] cursor-pointer hover:text-[#7a3dd0] transition-colors" 
+                        size={22} 
+                        onClick={() => openEmployeeDetailModal(employee.EmployeeID)}
+                      />
                       <FiRefreshCcw className="text-amber-500 cursor-pointer hover:text-amber-600 transition-colors" size={22} />
                       <AiOutlineDelete
                         className="text-red-400 cursor-pointer hover:text-red-500 transition-colors"
@@ -192,6 +258,15 @@ const AdminEmployees = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Loading indicator */}
+        {isLoading && (
+          <div className="flex justify-center mt-4">
+            <div className="px-4 py-2 bg-white/80 rounded-lg shadow text-gray-700">
+              Loading employees...
+            </div>
+          </div>
+        )}
 
         {/* Add Employee Floating Button */}
         <div 
@@ -232,9 +307,16 @@ const AdminEmployees = () => {
         className="focus:outline-none"
       >
         <div className="bg-white/90 rounded-2xl backdrop-blur-xl border border-[#944EF8]/20 shadow-2xl">
-          <AddEmployee onClose={onCloseAdd} getEmployees={getEmployeeData} />
+          <AddEmployee onClose={onCloseAdd} getEmployees={selectedRole ? () => filterEmployeesByRole(selectedRole) : getEmployeeData} />
         </div>
       </Modal>
+      
+      {/* Employee Detail Modal */}
+      <EmployeeDataModal 
+        isOpen={employeeDetailModal.isOpen}
+        onClose={closeEmployeeDetailModal}
+        employeeId={employeeDetailModal.employeeId}
+      />
     </div>
   );
 };

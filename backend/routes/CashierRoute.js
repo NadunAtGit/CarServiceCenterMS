@@ -1,7 +1,7 @@
 const express = require("express");
 const bcrypt = require("bcryptjs"); // ✅ Import bcrypt
 const db = require("../db");
-const {generateEmployeeId,generatePartId,generateStockID,generateServiceID,generateBatchID}=require("../GenerateId")
+const {generateEmployeeId,generatePartId,generateStockID,generateServiceID,generateBatchID,generateInvoiceID}=require("../GenerateId")
 const { validateEmail, validatePhoneNumber } = require("../validations");
 const jwt = require("jsonwebtoken");
 const{authenticateToken,authorizeRoles}=require("../utilities");
@@ -1513,6 +1513,199 @@ router.delete('/services/:serviceId', authenticateToken, authorizeRoles(["Admin"
         res.status(200).json({ message: "Service deleted successfully" });
     });
 }); 
+
+
+
+
+router.post("/create-invoice/:JobCardID", authenticateToken, authorizeRoles(["Admin", "Cashier"]), async (req, res) => {
+    try {
+        const { JobCardID } = req.params;
+        if (!JobCardID) {
+            return res.status(400).json({ success: false, message: "JobCardID is required" });
+        }
+
+        // 1. Verify job card exists
+        const jobCardQuery = "SELECT * FROM JobCards WHERE JobCardID = ?";
+        const jobCardResult = await new Promise((resolve, reject) => {
+            db.query(jobCardQuery, [JobCardID], (err, result) => {
+                if (err) return reject(err);
+                resolve(result);
+            });
+        });
+
+        if (jobCardResult.length === 0) {
+            return res.status(404).json({ success: false, message: "Job card not found" });
+        }
+
+        // 2. Check if invoice already exists for this job card
+        const existingInvoiceQuery = "SELECT * FROM Invoice WHERE JobCard_ID = ?";
+        const existingInvoice = await new Promise((resolve, reject) => {
+            db.query(existingInvoiceQuery, [JobCardID], (err, result) => {
+                if (err) return reject(err);
+                resolve(result);
+            });
+        });
+
+        if (existingInvoice.length > 0) {
+            return res.status(400).json({ 
+                success: false, 
+                message: "Invoice already exists for this job card",
+                invoiceId: existingInvoice[0].Invoice_ID
+            });
+        }
+
+        // 3. Get all service records for this job card
+        const serviceRecordsQuery = `
+            SELECT sr.ServiceRecord_ID, sr.Description, sr.ServiceType, sr.Status
+            FROM ServiceRecords sr WHERE sr.JobCardID = ?`;
+        
+        const serviceRecords = await new Promise((resolve, reject) => {
+            db.query(serviceRecordsQuery, [JobCardID], (err, result) => {
+                if (err) return reject(err);
+                resolve(result);
+            });
+        });
+
+        // 4. For each service record, look up the price in the Services table
+        let totalServiceCost = 0;
+        const serviceLineItems = [];
+        
+        for (const record of serviceRecords) {
+            const servicePriceQuery = `
+                SELECT Price FROM Services WHERE ServiceName = ? OR Description = ? LIMIT 1`;
+            
+            const servicePriceResult = await new Promise((resolve, reject) => {
+                db.query(servicePriceQuery, [record.Description, record.Description], (err, result) => {
+                    if (err) return reject(err);
+                    resolve(result);
+                });
+            });
+            
+            const price = servicePriceResult.length > 0 ? parseFloat(servicePriceResult[0].Price) : 0;
+            totalServiceCost += price;
+            
+            serviceLineItems.push({
+                serviceRecordId: record.ServiceRecord_ID,
+                description: record.Description,
+                serviceType: record.ServiceType,
+                status: record.Status,
+                price
+            });
+        }
+
+        // 5. Get all issued parts for this job card from PartInventoryLogs
+        const issuedPartsQuery = `
+            SELECT p.PartID, p.Name as PartName, pl.BatchNumber, SUM(pl.Quantity) as TotalQuantity, pl.UnitPrice
+            FROM PartInventoryLogs pl
+            JOIN Parts p ON pl.PartID = p.PartID
+            WHERE pl.JobCardID = ? AND pl.TransactionType = 'Issue'
+            GROUP BY p.PartID, p.Name, pl.BatchNumber, pl.UnitPrice`;
+        
+        const issuedParts = await new Promise((resolve, reject) => {
+            db.query(issuedPartsQuery, [JobCardID], (err, result) => {
+                if (err) return reject(err);
+                resolve(result);
+            });
+        });
+
+        // 6. Calculate parts cost
+        let totalPartsCost = 0;
+        const partLineItems = [];
+        
+        for (const part of issuedParts) {
+            const partTotal = parseFloat(part.UnitPrice) * parseInt(part.TotalQuantity, 10);
+            totalPartsCost += partTotal;
+            
+            partLineItems.push({
+                partId: part.PartID,
+                partName: part.PartName,
+                batchNumber: part.BatchNumber,
+                quantity: part.TotalQuantity,
+                unitPrice: parseFloat(part.UnitPrice),
+                total: partTotal
+            });
+        }
+
+        // 7. Generate a unique invoice ID
+        const invoiceID = await generateInvoiceID();
+
+        // 8. Calculate total cost
+        const subtotal = totalServiceCost + totalPartsCost;
+        const taxRate = 0.15;
+        const taxAmount = subtotal * taxRate;
+        const total = subtotal + taxAmount;
+
+        // 9. Insert the invoice into the database
+        const insertInvoiceQuery = `
+            INSERT INTO Invoice (
+                Invoice_ID, Total, Parts_Cost, JobCard_ID, Labour_Cost, 
+                GeneratedBy, GeneratedDate, PaidStatus, Notes
+            ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'Pending', ?)`;
+        
+        await new Promise((resolve, reject) => {
+            db.query(insertInvoiceQuery, [
+                invoiceID, 
+                total, 
+                totalPartsCost, 
+                JobCardID, 
+                totalServiceCost, 
+                req.user.employeeId, // Assuming the authenticated user's ID is stored in req.user.employeeId
+                `Invoice generated for job card ${JobCardID}. Includes ${serviceRecords.length} services and ${issuedParts.length} parts.`
+            ], (err, result) => {
+                if (err) return reject(err);
+                resolve(result);
+            });
+        });
+
+        // 10. Update the job card status to "Invoice Generated"
+        const updateJobCardQuery = "UPDATE JobCards SET Status = 'Invoice Generated' WHERE JobCardID = ?";
+        
+        await new Promise((resolve, reject) => {
+            db.query(updateJobCardQuery, [JobCardID], (err, result) => {
+                if (err) return reject(err);
+                resolve(result);
+            });
+        });
+
+        // 11. Build invoice object for response
+        const invoice = {
+            invoiceID,
+            jobCardID: JobCardID,
+            date: new Date().toISOString().split('T')[0],
+            dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            services: serviceLineItems,
+            parts: partLineItems,
+            totalServiceCost,
+            totalPartsCost,
+            subtotal,
+            taxRate: taxRate * 100,
+            taxAmount,
+            total,
+            status: "Pending",
+            generatedBy: req.user.employeeId
+        };
+
+        return res.status(200).json({
+            success: true,
+            message: "Invoice created successfully and job card status updated",
+            invoice
+        });
+
+    } catch (error) {
+        console.error("Error creating invoice:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+});
+
+
+
+
+
+
 
 
 

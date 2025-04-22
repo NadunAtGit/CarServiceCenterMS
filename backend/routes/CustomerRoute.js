@@ -93,7 +93,7 @@ router.post("/customer-login", async (req, res) => {
             const accessToken = jwt.sign(
                 { customerId: customer.CustomerID, email: customer.Email,role: "Customer" },
                 process.env.ACCESS_TOKEN_SECRET, // Make sure to set this in your .env file
-                { expiresIn: '1h' } // Optional: set expiration for the token
+                { expiresIn: '24h' } // Optional: set expiration for the token
             );
 
             // Send success response with token
@@ -399,6 +399,343 @@ router.get("/servicerecords/:jobcardid",authenticateToken, async (req, res) => {
         return res.status(500).json({ error: true, message: "Server error" });
     }
 });
+
+router.get("/get-notconfirmed-appointments", authenticateToken, async (req, res) => {
+    const customerId = req.user.customerId;
+    try {
+        const query = `
+            SELECT a.*, v.Model as VehicleModel 
+            FROM Appointments a
+            LEFT JOIN Vehicles v ON a.VehicleID = v.VehicleNo
+            WHERE a.CustomerID = ? AND a.Status = 'Not Confirmed'
+        `;
+        
+        db.query(query, [customerId], (err, results) => {
+            if (err) {
+                console.error("Error fetching pending appointments:", err);
+                return res.status(500).json({ 
+                    success: false, 
+                    message: "Error fetching pending appointments", 
+                    error: err 
+                });
+            }
+            
+            // Format dates if needed
+            const appointments = results.map(appointment => {
+                // Convert date objects to ISO strings for consistent JSON serialization
+                if (appointment.AppointmentDate instanceof Date) {
+                    appointment.AppointmentDate = appointment.AppointmentDate.toISOString();
+                }
+                if (appointment.AppointmentMadeDate instanceof Date) {
+                    appointment.AppointmentMadeDate = appointment.AppointmentMadeDate.toISOString();
+                }
+                return appointment;
+            });
+            
+            return res.status(200).json({
+                success: true,
+                message: "Pending appointments retrieved successfully",
+                appointments: appointments,
+                count: appointments.length
+            });
+        });
+    } catch (error) {
+        console.error("Error in get-notconfirmed-appointments route:", error);
+        return res.status(500).json({ 
+            success: false, 
+            message: "Internal server error", 
+            error: error.message 
+        });
+    }
+});
+
+
+router.get("/get-assigned-workers/:JobCardId", authenticateToken, async (req, res) => {
+    const { JobCardId } = req.params;
+    
+    try {
+        // Validate the JobCardId parameter
+        if (!JobCardId) {
+            return res.status(400).json({
+                success: false,
+                message: "JobCardId is required"
+            });
+        }
+        
+        // First check if the job card exists
+        const jobCardQuery = "SELECT * FROM JobCards WHERE JobCardID = ?";
+        
+        db.query(jobCardQuery, [JobCardId], (err, jobCardResult) => {
+            if (err) {
+                console.error("Error checking job card:", err);
+                return res.status(500).json({
+                    success: false,
+                    message: "Error checking job card",
+                    error: err
+                });
+            }
+            
+            if (jobCardResult.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Job card not found"
+                });
+            }
+            
+            // Query to get assigned mechanics with their details from Employees table
+            const assignedMechanicsQuery = `
+                SELECT ma.JobCardID, ma.EmployeeID, 
+                       e.Name ,e.Role, e.Rating, e.ProfilePicUrl
+                FROM Mechanics_Assigned ma
+                JOIN Employees e ON ma.EmployeeID = e.EmployeeID
+                WHERE ma.JobCardID = ?
+                ORDER BY e.Role, e.Rating DESC
+            `;
+            
+            db.query(assignedMechanicsQuery, [JobCardId], (err, mechanics) => {
+                if (err) {
+                    console.error("Error fetching assigned mechanics:", err);
+                    return res.status(500).json({
+                        success: false,
+                        message: "Error fetching assigned mechanics",
+                        error: err
+                    });
+                }
+                
+                // Format the response data
+                const formattedMechanics = mechanics.map(mechanic => {
+                    return {
+                        employeeId: mechanic.EmployeeID,
+                        name: `${mechanic.Name}`,
+                        role: mechanic.Role,
+                        rating: mechanic.Rating,
+                        profilePicUrl: mechanic.ProfilePicUrl || null
+                    };
+                });
+                
+                // Return the response
+                return res.status(200).json({
+                    success: true,
+                    message: "Assigned mechanics retrieved successfully",
+                    jobCardId: JobCardId,
+                    assignedMechanics: formattedMechanics,
+                    count: formattedMechanics.length
+                });
+            });
+        });
+    } catch (error) {
+        console.error("Unhandled error in get-assigned-workers route:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+});
+
+router.get("/get-notfinished-jobcards", authenticateToken, async (req, res) => {
+    try {
+        // Get the customer ID from the authenticated user
+        const customerId = req.user.customerId;
+        
+        if (!customerId) {
+            return res.status(400).json({
+                success: false,
+                message: "Customer ID not found in authentication token"
+            });
+        }
+        
+        // First query to get job cards that belong to the logged-in user and are not finished
+        const jobCardsQuery = `
+            SELECT jc.*, a.Date as AppointmentDate, a.Time as AppointmentTime, 
+                   v.Model as VehicleModel, v.Type as VehicleType, v.VehicleNo
+            FROM JobCards jc
+            JOIN Appointments a ON jc.AppointmentID = a.AppointmentID
+            JOIN Vehicles v ON a.VehicleID = v.VehicleNo
+            WHERE a.CustomerID = ? AND jc.Status != 'Finished'
+            ORDER BY jc.JobCardID DESC
+        `;
+        
+        db.query(jobCardsQuery, [customerId], (err, jobCards) => {
+            if (err) {
+                console.error("Error fetching job cards:", err);
+                return res.status(500).json({
+                    success: false,
+                    message: "Error fetching job cards",
+                    error: err
+                });
+            }
+            
+            // If no job cards found, return empty array
+            if (jobCards.length === 0) {
+                return res.status(200).json({
+                    success: true,
+                    jobCards: [],
+                    count: 0
+                });
+            }
+            
+            // Extract job card IDs for the second query
+            const jobCardIds = jobCards.map(jobCard => jobCard.JobCardID);
+            
+            // Second query to get service records for these job cards
+            const serviceRecordsQuery = `
+                SELECT sr.*
+                FROM ServiceRecords sr
+                WHERE sr.JobCardID IN (?)
+                ORDER BY sr.ServiceRecord_ID
+            `;
+            
+            db.query(serviceRecordsQuery, [jobCardIds], (err, serviceRecords) => {
+                if (err) {
+                    console.error("Error fetching service records:", err);
+                    return res.status(500).json({
+                        success: false,
+                        message: "Error fetching service records",
+                        error: err
+                    });
+                }
+                
+                // Format dates for consistent JSON serialization
+                const formattedJobCards = jobCards.map(jobCard => {
+                    // Format the appointment date
+                    if (jobCard.AppointmentDate instanceof Date) {
+                        jobCard.AppointmentDate = jobCard.AppointmentDate.toISOString();
+                    }
+                    
+                    // Add service records related to this job card
+                    const jobCardServices = serviceRecords.filter(
+                        record => record.JobCardID === jobCard.JobCardID
+                    );
+                    
+                    // Return the job card with its service records
+                    return {
+                        ...jobCard,
+                        Services: jobCardServices
+                    };
+                });
+                
+                return res.status(200).json({
+                    success: true,
+                    jobCards: formattedJobCards,
+                    count: formattedJobCards.length
+                });
+            });
+        });
+    } catch (error) {
+        console.error("Unhandled error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+});
+
+
+router.get("/getjobcard/:id", authenticateToken, async (req, res) => {
+    try {
+        // Get the customer ID from the authenticated user
+        const customerId = req.user.customerId;
+        const jobCardId = req.params.id;
+        
+        if (!customerId) {
+            return res.status(400).json({
+                success: false,
+                message: "Customer ID not found in authentication token"
+            });
+        }
+        
+        if (!jobCardId) {
+            return res.status(400).json({
+                success: false,
+                message: "Job card ID is required"
+            });
+        }
+        
+        // First query to get the specific job card that belongs to the logged-in user
+        const jobCardQuery = `
+            SELECT jc.*, a.Date as AppointmentDate, a.Time as AppointmentTime, 
+                   v.Model as VehicleModel, v.Type as VehicleType, v.VehicleNo
+            FROM JobCards jc
+            JOIN Appointments a ON jc.AppointmentID = a.AppointmentID
+            JOIN Vehicles v ON a.VehicleID = v.VehicleNo
+            WHERE a.CustomerID = ? AND jc.JobCardID = ?
+        `;
+        
+        db.query(jobCardQuery, [customerId, jobCardId], (err, jobCards) => {
+            if (err) {
+                console.error("Error fetching job card:", err);
+                return res.status(500).json({
+                    success: false,
+                    message: "Error fetching job card",
+                    error: err
+                });
+            }
+            
+            // If job card not found, return appropriate message
+            if (jobCards.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Job card not found or does not belong to the authenticated user"
+                });
+            }
+            
+            // Second query to get service records for this job card
+            const serviceRecordsQuery = `
+                SELECT sr.*
+                FROM ServiceRecords sr
+                WHERE sr.JobCardID = ?
+                ORDER BY sr.ServiceRecord_ID
+            `;
+            
+            db.query(serviceRecordsQuery, [jobCardId], (err, serviceRecords) => {
+                if (err) {
+                    console.error("Error fetching service records:", err);
+                    return res.status(500).json({
+                        success: false,
+                        message: "Error fetching service records",
+                        error: err
+                    });
+                }
+                
+                // Format dates for consistent JSON serialization
+                const formattedJobCards = jobCards.map(jobCard => {
+                    // Format the appointment date
+                    if (jobCard.AppointmentDate instanceof Date) {
+                        jobCard.AppointmentDate = jobCard.AppointmentDate.toISOString();
+                    }
+                    
+                    // Return the job card with its service records
+                    return {
+                        ...jobCard,
+                        Services: serviceRecords
+                    };
+                });
+                
+                return res.status(200).json({
+                    success: true,
+                    jobCards: formattedJobCards,
+                    count: formattedJobCards.length
+                });
+            });
+        });
+    } catch (error) {
+        console.error("Unhandled error in getjobcard/:id route:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+});
+
+
+
+
+
+
+
 
 
 

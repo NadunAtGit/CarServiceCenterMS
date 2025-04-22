@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { FiSearch, FiCalendar } from "react-icons/fi";
+import { FiSearch, FiCalendar, FiX } from "react-icons/fi";
 import axiosInstance from "../../utils/AxiosInstance";
 import AppointmentCard from "../../components/Cards/AppointmentCard";
 import Slider from "react-slick";
@@ -16,6 +16,19 @@ const AdminAppointments = () => {
   const [notConfirmed, setNotConfirmed] = useState([]);
   const [selectedDate, setSelectedDate] = useState(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
+
+  // Format date to YYYY-MM-DD format for API requests and consistent comparison
+  const formatDateForAPI = (date) => {
+    if (!date) return null;
+    return date.toISOString().split('T')[0];
+  };
+
+  // Format date for display in UI
+  const formatDateForDisplay = (dateString) => {
+    if (!dateString) return "";
+    const date = new Date(dateString);
+    return date.toLocaleDateString();
+  };
 
   const fetchAppointments = async () => {
     try {
@@ -49,12 +62,64 @@ const AdminAppointments = () => {
   };
 
   const searchAppointments = async () => {
-    if (!searchQuery.trim() && !selectedDate) {
-      setFilteredAppointments(appointments);
-      return;
-    }
-
     setIsLoading(true);
+    
+    try {
+      // If we have a date filter, we should fetch filtered data from API
+      if (selectedDate) {
+        const formattedDate = formatDateForAPI(selectedDate);
+        
+        // Make API call to get appointments filtered by date
+        const response = await axiosInstance.get(`api/appointments/filter-by-date/${formattedDate}`);
+        
+        if (response.data.success) {
+          let results = response.data.appointments;
+          
+          // If we also have a search query, further filter the results
+          if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase();
+            results = results.filter(appointment => 
+              (appointment.AppointmentID && appointment.AppointmentID.toString().toLowerCase().includes(query)) ||
+              (appointment.CustomerID && appointment.CustomerID.toString().toLowerCase().includes(query)) ||
+              (appointment.VehicleID && appointment.VehicleID.toLowerCase().includes(query)) ||
+              (appointment.Status && appointment.Status.toLowerCase().includes(query))
+            );
+          }
+          
+          setFilteredAppointments(results);
+        } else {
+          console.error("Failed to fetch filtered appointments:", response.data.message);
+          setFilteredAppointments([]);
+        }
+      } 
+      // If no date filter but we have search query
+      else if (searchQuery.trim()) {
+        // Filter locally if we're only using search query
+        const query = searchQuery.toLowerCase();
+        const results = appointments.filter(appointment => 
+          (appointment.AppointmentID && appointment.AppointmentID.toString().toLowerCase().includes(query)) ||
+          (appointment.CustomerID && appointment.CustomerID.toString().toLowerCase().includes(query)) ||
+          (appointment.VehicleID && appointment.VehicleID.toLowerCase().includes(query)) ||
+          (appointment.Status && appointment.Status.toLowerCase().includes(query))
+        );
+        setFilteredAppointments(results);
+      } 
+      // If no filters at all
+      else {
+        setFilteredAppointments(appointments);
+      }
+    } catch (error) {
+      console.error("Error searching appointments:", error);
+      setFilteredAppointments([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Alternative implementation for client-side filtering if API endpoint is not available
+  const clientSideSearch = () => {
+    setIsLoading(true);
+    
     try {
       let results = [...appointments];
 
@@ -69,17 +134,21 @@ const AdminAppointments = () => {
         );
       }
 
-      // Apply date filter
+      // Apply date filter - Make sure to handle date formats correctly
       if (selectedDate) {
-        const filterDate = selectedDate.toISOString().split('T')[0];
-        results = results.filter(appointment => 
-          appointment.Date === filterDate
-        );
+        const filterDate = formatDateForAPI(selectedDate);
+        
+        results = results.filter(appointment => {
+          // Ensure both dates are in the same format for comparison
+          const appointmentDate = appointment.Date;
+          return appointmentDate === filterDate;
+        });
       }
 
       setFilteredAppointments(results);
     } catch (error) {
       console.error("Error searching appointments:", error);
+      setFilteredAppointments([]);
     } finally {
       setIsLoading(false);
     }
@@ -101,6 +170,9 @@ const AdminAppointments = () => {
         setAppointments(prev => prev.filter(a => a.AppointmentID !== id));
         setFilteredAppointments(prev => prev.filter(a => a.AppointmentID !== id));
         alert("Appointment deleted successfully!");
+        
+        // Also refresh not confirmed list if needed
+        fetchNotConfirmed();
       } else {
         alert("Failed to delete the appointment: " + response.data.message);
       }
@@ -123,14 +195,27 @@ const AdminAppointments = () => {
     setFilteredAppointments(appointments);
   };
 
+  // Handle clicks outside datepicker to close it
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (showDatePicker && !event.target.closest(".date-picker-container")) {
+        setShowDatePicker(false);
+      }
+    }
+    
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showDatePicker]);
+
   useEffect(() => {
     fetchAppointments();
     fetchNotConfirmed();
   }, []);
 
-  useEffect(() => {
-    searchAppointments();
-  }, [selectedDate]);
+  // Changed to manually trigger search instead of auto-searching on date change
+  // This gives more control to the user
 
   const settings = {
     dots: true,
@@ -193,7 +278,7 @@ const AdminAppointments = () => {
 
         {/* Search Section */}
         <div className="w-full grid md:grid-cols-4 gap-3 mb-6">
-          <div className="col-span-full md:col-span-3 flex space-x-2">
+          <div className="col-span-full md:col-span-3 flex space-x-2 flex-wrap md:flex-nowrap gap-2">
             <div className="flex-grow relative">
               <input
                 type="text"
@@ -207,13 +292,23 @@ const AdminAppointments = () => {
             </div>
             
             {/* Date Filter */}
-            <div className="relative">
+            <div className="relative date-picker-container">
               <button
                 className="flex items-center gap-2 px-4 py-2 h-full rounded-lg bg-white/70 text-gray-800 border border-[#944EF8]/20 hover:bg-[#944EF8]/10 transition-all duration-300"
                 onClick={() => setShowDatePicker(!showDatePicker)}
               >
                 <FiCalendar size={20} />
-                {selectedDate ? selectedDate.toLocaleDateString() : "Filter by date"}
+                {selectedDate ? formatDateForDisplay(selectedDate) : "Filter by date"}
+                {selectedDate && (
+                  <FiX 
+                    size={16} 
+                    className="ml-2 text-gray-500 hover:text-red-500"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedDate(null);
+                    }}
+                  />
+                )}
               </button>
               
               {showDatePicker && (
@@ -276,10 +371,19 @@ const AdminAppointments = () => {
                     <td className="py-3 px-4 hidden md:table-cell text-gray-700">{appointment.AppointmentID}</td>
                     <td className="py-3 px-4 text-gray-800 font-medium">{appointment.CustomerID}</td>
                     <td className="py-3 px-4 hidden md:table-cell text-gray-700">{appointment.VehicleID}</td>
-                    <td className="py-3 px-4 text-gray-700">{appointment.Date}</td>
+                    <td className="py-3 px-4 text-gray-700">{formatDateForDisplay(appointment.Date)}</td>
                     <td className="py-3 px-4 hidden md:table-cell text-gray-700">{appointment.Time}</td>
-                    <td className="py-3 px-4 text-gray-700">{appointment.Status}</td>
-                    <td className="py-3 px-4 hidden md:table-cell text-gray-700">{appointment.AppointmentMadeDate}</td>
+                    <td className="py-3 px-4">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        appointment.Status === 'Confirmed' ? 'bg-green-100 text-green-800' :
+                        appointment.Status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+                        appointment.Status === 'Canceled' ? 'bg-red-100 text-red-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {appointment.Status}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 hidden md:table-cell text-gray-700">{formatDateForDisplay(appointment.AppointmentMadeDate)}</td>
                     <td className="py-3 px-4">
                       <button 
                         className="text-red-500 hover:text-red-600 transition-colors"
