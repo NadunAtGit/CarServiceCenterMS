@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import axiosInstance from '../../utils/AxiosInstance';
 
-const CreateInvoiceCard = ({ jobCard }) => {
+const CreateInvoiceCard = ({ jobCard, onInvoiceCreated }) => {
   const [creating, setCreating] = useState(false);
   const [invoice, setInvoice] = useState(null);
   const [error, setError] = useState('');
@@ -14,6 +14,12 @@ const CreateInvoiceCard = ({ jobCard }) => {
       const res = await axiosInstance.post(`/api/cashier/create-invoice/${jobCard.JobCardID}`);
       if (res.data.success) {
         setInvoice(res.data.invoice);
+        // Call the callback function after successful invoice creation
+        if (onInvoiceCreated) {
+          setTimeout(() => {
+            onInvoiceCreated();
+          }, 1500);
+        }
       } else {
         setError(res.data.message || 'Failed to create invoice');
       }

@@ -38,145 +38,158 @@ router.post("/create-jobcard/:appointmentId", authenticateToken, authorizeRoles(
 
             const { CustomerID, VehicleID } = result[0];
 
-            // Fetch FirebaseToken of the customer
-            const customerFCMTokenQuery = "SELECT FirebaseToken FROM Customers WHERE CustomerID = ?";
-            db.query(customerFCMTokenQuery, [CustomerID], async (tokenErr, tokenResult) => {
-                if (tokenErr) {
-                    console.error("Error fetching FirebaseToken:", tokenErr);
-                    return res.status(500).json({ error: true, message: "Error retrieving Firebase token" });
+            // Get the vehicle's current mileage
+            const getVehicleMileageQuery = "SELECT CurrentMilleage FROM Vehicles WHERE VehicleNo = ?";
+            db.query(getVehicleMileageQuery, [VehicleID], async (mileageErr, mileageResult) => {
+                if (mileageErr) {
+                    console.error("Error fetching vehicle mileage:", mileageErr);
+                    return res.status(500).json({ error: true, message: "Error retrieving vehicle mileage" });
                 }
 
-                const fcmToken = tokenResult[0]?.FirebaseToken;
+                const currentMileage = mileageResult[0]?.CurrentMilleage || 0;
 
-                // Check if a JobCard already exists
-                const checkJobCardQuery = "SELECT * FROM JobCards WHERE AppointmentID = ?";
-                db.query(checkJobCardQuery, [appointmentId], async (jobCardErr, jobCardResult) => {
-                    if (jobCardErr) {
-                        console.error("Error checking JobCard:", jobCardErr);
-                        return res.status(500).json({ error: true, message: "Database error while checking job card" });
+                // Fetch FirebaseToken of the customer
+                const customerFCMTokenQuery = "SELECT FirebaseToken FROM Customers WHERE CustomerID = ?";
+                db.query(customerFCMTokenQuery, [CustomerID], async (tokenErr, tokenResult) => {
+                    if (tokenErr) {
+                        console.error("Error fetching FirebaseToken:", tokenErr);
+                        return res.status(500).json({ error: true, message: "Error retrieving Firebase token" });
                     }
 
-                    if (jobCardResult.length > 0) {
-                        return res.status(400).json({ error: true, message: "Job Card already created for this appointment" });
-                    }
+                    const fcmToken = tokenResult[0]?.FirebaseToken;
 
-                    const jobCardID = await generateJobCardId();
-
-                    // Insert Job Card
-                    const insertJobCardQuery = `INSERT INTO JobCards (JobCardID, ServiceDetails, Type, AppointmentID)
-                                                VALUES (?, ?, ?, ?)`;
-
-                    db.query(insertJobCardQuery, [jobCardID, ServiceDetails, Type, appointmentId], async (insertErr) => {
-                        if (insertErr) {
-                            console.error("Error inserting JobCard:", insertErr);
-                            return res.status(500).json({ error: true, message: "Internal server error" });
+                    // Check if a JobCard already exists
+                    const checkJobCardQuery = "SELECT * FROM JobCards WHERE AppointmentID = ?";
+                    db.query(checkJobCardQuery, [appointmentId], async (jobCardErr, jobCardResult) => {
+                        if (jobCardErr) {
+                            console.error("Error checking JobCard:", jobCardErr);
+                            return res.status(500).json({ error: true, message: "Database error while checking job card" });
                         }
 
-                        // Insert Service Records
-                        const insertServiceRecordQuery = `INSERT INTO ServiceRecords (ServiceRecord_ID, Description, JobCardID, VehicleID, ServiceType, Status)
-                                                           VALUES (?, ?, ?, ?, ?, ?)`;
+                        if (jobCardResult.length > 0) {
+                            return res.status(400).json({ error: true, message: "Job Card already created for this appointment" });
+                        }
 
-                        const serviceRecordPromises = ServiceRecords.map(async (record, index) => {
-                            const serviceRecordID = `SR-${jobCardID}-${index + 1}`;
-                            return new Promise((resolve, reject) => {
-                                db.query(
-                                    insertServiceRecordQuery,
-                                    [serviceRecordID, record.Description, jobCardID, VehicleID, record.ServiceType, "Not Started"],
-                                    (err) => {
-                                        if (err) reject(err);
-                                        else resolve();
-                                    }
-                                );
-                            });
-                        });
+                        const jobCardID = await generateJobCardId();
 
-                        try {
-                            await Promise.all(serviceRecordPromises);
+                        // Insert Job Card with ServiceMileage
+                        const insertJobCardQuery = `INSERT INTO JobCards (JobCardID, ServiceDetails, Type, AppointmentID, ServiceMilleage)
+                                                   VALUES (?, ?, ?, ?, ?)`;
 
-                            // Define notification
-                            const notificationTitle = 'Job Card Created';
-                            const notificationBody = `Your job card (ID: ${jobCardID}) has been created with ${ServiceRecords.length} service records.`;
-                            let notificationSent = false;
-
-                            // Send FCM notification
-                            if (fcmToken) {
-                                const notificationMessage = {
-                                    notification: {
-                                        title: notificationTitle,
-                                        body: notificationBody,
-                                    },
-                                    data: {
-                                        jobCardID,
-                                        type: 'jobcard'
-                                    },
-                                    token: fcmToken,
-                                };
-
-                                try {
-                                    await messaging.send(notificationMessage);
-                                    console.log("FCM notification sent successfully!");
-                                    notificationSent = true;
-                                } catch (notificationError) {
-                                    console.error("Error sending FCM notification:", notificationError);
-                                }
+                        db.query(insertJobCardQuery, [jobCardID, ServiceDetails, Type, appointmentId, currentMileage], async (insertErr) => {
+                            if (insertErr) {
+                                console.error("Error inserting JobCard:", insertErr);
+                                return res.status(500).json({ error: true, message: "Internal server error" });
                             }
 
-                            // Store in DB
-                            try {
-                                const notificationID = await generateNotificationId();
-                                const insertNotificationQuery = `
-                                    INSERT INTO notifications 
-                                    (notification_id, CustomerID, title, message, notification_type, icon_type, color_code, is_read, created_at,navigate_id)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, FALSE, CURRENT_TIMESTAMP,?)`;
+                            // Insert Service Records
+                            const insertServiceRecordQuery = `INSERT INTO ServiceRecords (ServiceRecord_ID, Description, JobCardID, VehicleID, ServiceType, Status)
+                                                           VALUES (?, ?, ?, ?, ?, ?)`;
 
-                                await new Promise((resolve, reject) => {
+                            const serviceRecordPromises = ServiceRecords.map(async (record, index) => {
+                                const serviceRecordID = `SR-${jobCardID}-${index + 1}`;
+                                return new Promise((resolve, reject) => {
                                     db.query(
-                                        insertNotificationQuery,
-                                        [
-                                            notificationID,
-                                            CustomerID,
-                                            notificationTitle,
-                                            notificationBody,
-                                            'Job Card',          // Notification type
-                                            'build',             // Icon type
-                                            '#f4cccc',
-                                            jobCardID           // Color code (light red/pink)
-                                        ],
-                                        (err, result) => {
-                                            if (err) {
-                                                console.error("Error storing notification in DB:", err);
-                                                return reject(err);
-                                            }
-                                            resolve(result);
+                                        insertServiceRecordQuery,
+                                        [serviceRecordID, record.Description, jobCardID, VehicleID, record.ServiceType, "Not Started"],
+                                        (err) => {
+                                            if (err) reject(err);
+                                            else resolve();
                                         }
                                     );
                                 });
+                            });
 
-                                console.log("Notification stored in DB with ID:", notificationID);
+                            try {
+                                await Promise.all(serviceRecordPromises);
 
-                                return res.status(200).json({
-                                    success: true,
-                                    message: "Job Card and Service Records created, notification sent and saved.",
-                                    notificationSent,
-                                    notificationID,
-                                    jobCardID
-                                });
+                                // Define notification
+                                const notificationTitle = 'Job Card Created';
+                                const notificationBody = `Your job card (ID: ${jobCardID}) has been created with ${ServiceRecords.length} service records.`;
+                                let notificationSent = false;
 
-                            } catch (dbNotificationErr) {
-                                console.error("Failed to store notification in DB:", dbNotificationErr);
+                                // Send FCM notification
+                                if (fcmToken) {
+                                    const notificationMessage = {
+                                        notification: {
+                                            title: notificationTitle,
+                                            body: notificationBody,
+                                        },
+                                        data: {
+                                            jobCardID,
+                                            type: 'jobcard'
+                                        },
+                                        token: fcmToken,
+                                    };
 
-                                return res.status(200).json({
-                                    success: true,
-                                    message: "Job Card and Service Records created, but failed to store notification.",
-                                    notificationSent,
-                                    jobCardID
-                                });
+                                    try {
+                                        await messaging.send(notificationMessage);
+                                        console.log("FCM notification sent successfully!");
+                                        notificationSent = true;
+                                    } catch (notificationError) {
+                                        console.error("Error sending FCM notification:", notificationError);
+                                    }
+                                }
+
+                                // Store in DB
+                                try {
+                                    const notificationID = await generateNotificationId();
+                                    const insertNotificationQuery = `
+                                        INSERT INTO notifications 
+                                        (notification_id, CustomerID, title, message, notification_type, icon_type, color_code, is_read, created_at, navigate_id)
+                                        VALUES (?, ?, ?, ?, ?, ?, ?, FALSE, CURRENT_TIMESTAMP, ?)`;
+
+                                    await new Promise((resolve, reject) => {
+                                        db.query(
+                                            insertNotificationQuery,
+                                            [
+                                                notificationID,
+                                                CustomerID,
+                                                notificationTitle,
+                                                notificationBody,
+                                                'Job Card',          // Notification type
+                                                'build',             // Icon type
+                                                '#f4cccc',           // Color code (light red/pink)
+                                                jobCardID            // Navigate ID
+                                            ],
+                                            (err, result) => {
+                                                if (err) {
+                                                    console.error("Error storing notification in DB:", err);
+                                                    return reject(err);
+                                                }
+                                                resolve(result);
+                                            }
+                                        );
+                                    });
+
+                                    console.log("Notification stored in DB with ID:", notificationID);
+
+                                    return res.status(200).json({
+                                        success: true,
+                                        message: "Job Card and Service Records created, notification sent and saved.",
+                                        notificationSent,
+                                        notificationID,
+                                        jobCardID,
+                                        serviceMileage: currentMileage
+                                    });
+
+                                } catch (dbNotificationErr) {
+                                    console.error("Failed to store notification in DB:", dbNotificationErr);
+
+                                    return res.status(200).json({
+                                        success: true,
+                                        message: "Job Card and Service Records created, but failed to store notification.",
+                                        notificationSent,
+                                        jobCardID,
+                                        serviceMileage: currentMileage
+                                    });
+                                }
+
+                            } catch (serviceInsertErr) {
+                                console.error("Error inserting Service Records:", serviceInsertErr);
+                                return res.status(500).json({ error: true, message: "Error inserting service records" });
                             }
-
-                        } catch (serviceInsertErr) {
-                            console.error("Error inserting Service Records:", serviceInsertErr);
-                            return res.status(500).json({ error: true, message: "Error inserting service records" });
-                        }
+                        });
                     });
                 });
             });
@@ -186,6 +199,7 @@ router.post("/create-jobcard/:appointmentId", authenticateToken, authorizeRoles(
         return res.status(500).json({ error: true, message: "Server error" });
     }
 });
+
 
 router.get("/jobcards", authenticateToken, authorizeRoles(["Service Advisor", "Cashier", "Mechanic", "Admin"]), async (req, res) => {
     const query = "SELECT * FROM JobCards";

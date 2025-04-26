@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FiTool, FiChevronRight, FiShoppingCart, FiCheckSquare } from 'react-icons/fi';
+import { FiTool, FiChevronRight, FiShoppingCart, FiCheckSquare, FiClock } from 'react-icons/fi';
 import ServiceItem from './ServiceItem';
 import OrderPartsModal from '../Modals/OrderPartsModal';
 import AxiosInstance from '../../utils/axiosInstance';
@@ -8,6 +8,8 @@ const JobCardStatusCard = ({ jobCard, onUpdateServiceStatus, isUpdating }) => {
   const [showOrderPartsModal, setShowOrderPartsModal] = useState(false);
   const [isOrderingParts, setIsOrderingParts] = useState(false);
   const [isFinishingJobCard, setIsFinishingJobCard] = useState(false);
+  const [nextServiceMileage, setNextServiceMileage] = useState('');
+  const [mileageError, setMileageError] = useState('');
 
   // Calculate the number of completed services
   const completedServices = jobCard.Services.filter(s => s.Status === 'Finished').length;
@@ -33,11 +35,39 @@ const JobCardStatusCard = ({ jobCard, onUpdateServiceStatus, isUpdating }) => {
     }
   };
 
+  const validateMileage = () => {
+    if (!nextServiceMileage) {
+      setMileageError('Next service mileage is required');
+      return false;
+    }
+    
+    const mileageValue = parseInt(nextServiceMileage);
+    if (isNaN(mileageValue)) {
+      setMileageError('Please enter a valid number');
+      return false;
+    }
+    
+    const currentMileage = jobCard.ServiceMilleage || 0;
+    if (mileageValue <= currentMileage) {
+      setMileageError(`Next service mileage must be greater than current mileage (${currentMileage})`);
+      return false;
+    }
+    
+    setMileageError('');
+    return true;
+  };
+
   const handleFinishJobCard = async () => {
+    if (!validateMileage()) {
+      return;
+    }
+    
     setIsFinishingJobCard(true);
     try {
-      // Call API to update job card status to 'Completed'
-      const response = await AxiosInstance.put(`/api/mechanic/finish-job/${jobCard.JobCardID}`);
+      // Call API to update job card status to 'Completed' with next service mileage
+      const response = await AxiosInstance.put(`/api/mechanic/finish-job/${jobCard.JobCardID}`, {
+        nextServiceMileage: parseInt(nextServiceMileage)
+      });
       
       if (response.data) {
         alert('Job card completed successfully!');
@@ -73,6 +103,15 @@ const JobCardStatusCard = ({ jobCard, onUpdateServiceStatus, isUpdating }) => {
             {jobCard.ServiceDetails}
           </p>
         </div>
+        
+        {/* Current Mileage Information */}
+        <div className="mb-4 p-3 bg-gray-50 rounded-md">
+          <div className="flex items-center">
+            <FiClock className="text-gray-600 mr-2" />
+            <span className="text-sm font-medium text-gray-700">Current Service Mileage:</span>
+            <span className="ml-2 text-sm text-gray-900">{jobCard.ServiceMilleage || 'N/A'} km</span>
+          </div>
+        </div>
           
         <div className="mb-3">
           <div className="flex justify-between items-center mb-1">
@@ -107,6 +146,33 @@ const JobCardStatusCard = ({ jobCard, onUpdateServiceStatus, isUpdating }) => {
           ))}
         </div>
       
+        {/* Next Service Mileage Input - Only show when all services are finished */}
+        {allServicesFinished && (
+          <div className="mt-4 p-4 border border-gray-200 rounded-md bg-gray-50">
+            <h3 className="font-medium text-gray-800 mb-2">
+              Set Next Service Mileage
+            </h3>
+            <div className="flex flex-col">
+              <div className="flex items-center">
+                <input
+                  type="number"
+                  value={nextServiceMileage}
+                  onChange={(e) => setNextServiceMileage(e.target.value)}
+                  placeholder="Enter next service mileage"
+                  className={`w-full p-2 border rounded-md ${mileageError ? 'border-red-500' : 'border-gray-300'}`}
+                />
+                <span className="ml-2 text-gray-600">km</span>
+              </div>
+              {mileageError && (
+                <p className="text-red-500 text-sm mt-1">{mileageError}</p>
+              )}
+              <p className="text-sm text-gray-500 mt-2">
+                Enter the mileage when the vehicle should be serviced next.
+              </p>
+            </div>
+          </div>
+        )}
+      
         <div className="mt-4 flex justify-end space-x-3">
           {!allServicesFinished && (
             <button 
@@ -122,7 +188,7 @@ const JobCardStatusCard = ({ jobCard, onUpdateServiceStatus, isUpdating }) => {
             <button 
               onClick={handleFinishJobCard}
               disabled={isFinishingJobCard}
-              className="flex items-center text-sm px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700 transition-colors"
+              className="flex items-center text-sm px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700 transition-colors disabled:bg-gray-400"
             >
               <FiCheckSquare className="mr-2" />
               {isFinishingJobCard ? 'Finishing...' : 'Finish Job Card'}

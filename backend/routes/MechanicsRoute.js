@@ -572,6 +572,10 @@ router.get("/check-part-availability/:partId", authenticateToken, authorizeRoles
 router.put("/finish-job/:JobCardID", authenticateToken, authorizeRoles(["Mechanic"]), async (req, res) => {
     const { JobCardID } = req.params;
     const mechanicId = req.user.EmployeeID;
+    const { nextServiceMileage } = req.body; // Get the next service mileage from request body
+    
+    console.log(`Starting finish-job for JobCardID: ${JobCardID}, mechanic: ${mechanicId}`);
+    console.log(`Next service mileage provided: ${nextServiceMileage}`);
 
     try {
         // Step 1: Check if the job card exists
@@ -588,6 +592,7 @@ router.put("/finish-job/:JobCardID", authenticateToken, authorizeRoles(["Mechani
             }
 
             if (jobCardResult.length === 0) {
+                console.error(`Job card ${JobCardID} not found`);
                 return res.status(404).json({ 
                     success: false, 
                     message: "Job card not found" 
@@ -595,9 +600,11 @@ router.put("/finish-job/:JobCardID", authenticateToken, authorizeRoles(["Mechani
             }
 
             const jobCard = jobCardResult[0];
+            console.log(`Found job card: ${JSON.stringify(jobCard)}`);
 
             // Step 2: Check if the job card is already finished
             if (jobCard.Status === 'Finished') {
+                console.error(`Job card ${JobCardID} is already finished`);
                 return res.status(400).json({ 
                     success: false, 
                     message: "Job card is already marked as finished" 
@@ -621,6 +628,7 @@ router.put("/finish-job/:JobCardID", authenticateToken, authorizeRoles(["Mechani
 
                 // If there are any incomplete services, don't allow finishing the job card
                 if (incompleteServices.length > 0) {
+                    console.error(`Job card ${JobCardID} has ${incompleteServices.length} incomplete services`);
                     return res.status(400).json({ 
                         success: false, 
                         message: "Cannot finish job card. There are still unfinished services.", 
@@ -628,121 +636,210 @@ router.put("/finish-job/:JobCardID", authenticateToken, authorizeRoles(["Mechani
                     });
                 }
 
-                // Step 4: Get all mechanics assigned to this job card
-                const getMechanicsQuery = `
-                    SELECT EmployeeID FROM mechanics_assigned 
-                    WHERE JobCardID = ?`;
+                // Step 4: Get the AppointmentID from JobCard to fetch VehicleID
+                console.log(`Getting AppointmentID from JobCard ${JobCardID}`);
+                const appointmentID = jobCard.AppointmentID;
                 
-                db.query(getMechanicsQuery, [JobCardID], (err, assignedMechanics) => {
+                if (!appointmentID) {
+                    console.error(`No AppointmentID found for JobCard ${JobCardID}`);
+                    return res.status(400).json({
+                        success: false,
+                        message: "Job card has no associated appointment"
+                    });
+                }
+                
+                console.log(`Found AppointmentID: ${appointmentID}, fetching VehicleID`);
+                
+                // Step 5: Get VehicleID from Appointments table
+                const getVehicleQuery = `
+                    SELECT VehicleID, CustomerID FROM Appointments 
+                    WHERE AppointmentID = ?`;
+                
+                db.query(getVehicleQuery, [appointmentID], (err, appointmentResult) => {
                     if (err) {
-                        console.error("Error fetching assigned mechanics:", err);
-                        return res.status(500).json({ 
-                            success: false, 
-                            message: "Error fetching assigned mechanics", 
-                            error: err 
+                        console.error(`Error fetching appointment data: ${err.message}`);
+                        return res.status(500).json({
+                            success: false,
+                            message: "Error fetching vehicle information",
+                            error: err
                         });
                     }
-
-                    // Begin transaction to update job card and attendances
-                    db.beginTransaction(err => {
+                    
+                    if (appointmentResult.length === 0) {
+                        console.error(`No appointment found with ID ${appointmentID}`);
+                        return res.status(404).json({
+                            success: false,
+                            message: "Associated appointment not found"
+                        });
+                    }
+                    
+                    const vehicleID = appointmentResult[0].VehicleID;
+                    const customerID = appointmentResult[0].CustomerID;
+                    
+                    console.log(`Found VehicleID: ${vehicleID} for CustomerID: ${customerID}`);
+                    
+                    // Step 6: Get all mechanics assigned to this job card
+                    const getMechanicsQuery = `
+                        SELECT EmployeeID FROM mechanics_assigned 
+                        WHERE JobCardID = ?`;
+                    
+                    db.query(getMechanicsQuery, [JobCardID], (err, assignedMechanics) => {
                         if (err) {
-                            console.error("Error starting transaction:", err);
+                            console.error("Error fetching assigned mechanics:", err);
                             return res.status(500).json({ 
                                 success: false, 
-                                message: "Error starting transaction", 
+                                message: "Error fetching assigned mechanics", 
                                 error: err 
                             });
                         }
 
-                        // Step 5.1: Update job card status to 'Finished'
-                        const updateJobCardQuery = `
-                            UPDATE JobCards 
-                            SET Status = 'Finished'
-                            WHERE JobCardID = ?`;
-                        
-                        db.query(updateJobCardQuery, [JobCardID], (err, updateResult) => {
+                        console.log(`Found ${assignedMechanics.length} mechanics assigned to job card`);
+
+                        // Begin transaction to update job card, attendances, and vehicle mileage
+                        db.beginTransaction(err => {
                             if (err) {
-                                db.rollback(() => {
-                                    console.error("Error updating job card status:", err);
-                                    return res.status(500).json({ 
-                                        success: false, 
-                                        message: "Error updating job card status", 
-                                        error: err 
-                                    });
+                                console.error("Error starting transaction:", err);
+                                return res.status(500).json({ 
+                                    success: false, 
+                                    message: "Error starting transaction", 
+                                    error: err 
                                 });
-                                return;
                             }
 
-                            // If no mechanics are assigned, just commit the transaction
-                            if (assignedMechanics.length === 0) {
-                                db.commit(err => {
-                                    if (err) {
-                                        db.rollback(() => {
-                                            console.error("Error committing transaction:", err);
-                                            return res.status(500).json({ 
-                                                success: false, 
-                                                message: "Error committing transaction", 
-                                                error: err 
-                                            });
-                                        });
-                                        return;
-                                    }
-
-                                    return res.status(200).json({ 
-                                        success: true, 
-                                        message: "Job card finished successfully. No mechanics were assigned.", 
-                                        jobCardId: JobCardID,
-                                        completedBy: mechanicId,
-                                        completedAt: new Date()
-                                    });
-                                });
-                                return;
-                            }
-
-                            // Get array of mechanic IDs
-                            const mechanicIds = assignedMechanics.map(mech => mech.EmployeeID);
+                            // Step 7.1: Update job card status to 'Finished'
+                            const updateJobCardQuery = `
+                                UPDATE JobCards 
+                                SET Status = 'Finished'
+                                WHERE JobCardID = ?`;
                             
-                            // Step 5.2: Update attendances table to set isWorking = 0 for all assigned mechanics
-                            const updateAttendancesQuery = `
-                                UPDATE attendances 
-                                SET isWorking = 0
-                                WHERE EmployeeID IN (?)`;
-                            
-                            db.query(updateAttendancesQuery, [mechanicIds], (err, attendancesResult) => {
+                            db.query(updateJobCardQuery, [JobCardID], (err, updateResult) => {
                                 if (err) {
                                     db.rollback(() => {
-                                        console.error("Error updating attendances:", err);
+                                        console.error(`Error updating job card status: ${err.message}`);
                                         return res.status(500).json({ 
                                             success: false, 
-                                            message: "Error updating attendances", 
+                                            message: "Error updating job card status", 
                                             error: err 
                                         });
                                     });
                                     return;
                                 }
-
-                                // Commit the transaction
-                                db.commit(err => {
+                                
+                                console.log(`Job card status updated to Finished`);
+                                
+                                // Step 7.2: Get current service mileage from JobCard
+                                const serviceMilleage = jobCard.ServiceMilleage || 0;
+                                console.log(`Current service mileage: ${serviceMilleage}`);
+                                
+                                // Calculate next service mileage if not provided
+                                const nextMileage = nextServiceMileage || (serviceMilleage + 5000);
+                                console.log(`Next service mileage will be set to: ${nextMileage}`);
+                                
+                                // Step 7.3: Update vehicle's NextServiceMilleage
+                                const updateVehicleQuery = `
+                                    UPDATE Vehicles 
+                                    SET NextServiceMilleage = ? 
+                                    WHERE VehicleNo = ?`;
+                                
+                                db.query(updateVehicleQuery, [nextMileage, vehicleID], (err, vehicleResult) => {
                                     if (err) {
                                         db.rollback(() => {
-                                            console.error("Error committing transaction:", err);
+                                            console.error(`Error updating vehicle mileage: ${err.message}`);
                                             return res.status(500).json({ 
                                                 success: false, 
-                                                message: "Error committing transaction", 
+                                                message: "Error updating vehicle next service mileage", 
                                                 error: err 
                                             });
                                         });
                                         return;
                                     }
+                                    
+                                    console.log(`Updated NextServiceMilleage for vehicle ${vehicleID} to ${nextMileage}`);
+                                    console.log(`Affected rows: ${vehicleResult.affectedRows}`);
 
-                                    // Success response
-                                    return res.status(200).json({ 
-                                        success: true, 
-                                        message: "Job card finished successfully and mechanics released", 
-                                        jobCardId: JobCardID,
-                                        completedBy: mechanicId,
-                                        completedAt: new Date(),
-                                        releasedMechanics: mechanicIds
+                                    // If no mechanics are assigned, just commit the transaction
+                                    if (assignedMechanics.length === 0) {
+                                        db.commit(err => {
+                                            if (err) {
+                                                db.rollback(() => {
+                                                    console.error("Error committing transaction:", err);
+                                                    return res.status(500).json({ 
+                                                        success: false, 
+                                                        message: "Error committing transaction", 
+                                                        error: err 
+                                                    });
+                                                });
+                                                return;
+                                            }
+
+                                            console.log(`Transaction committed successfully, no mechanics to release`);
+                                            return res.status(200).json({ 
+                                                success: true, 
+                                                message: "Job card finished successfully. No mechanics were assigned.", 
+                                                jobCardId: JobCardID,
+                                                completedBy: mechanicId,
+                                                completedAt: new Date(),
+                                                currentMileage: serviceMilleage,
+                                                nextServiceMileage: nextMileage,
+                                                vehicleId: vehicleID
+                                            });
+                                        });
+                                        return;
+                                    }
+
+                                    // Get array of mechanic IDs
+                                    const mechanicIds = assignedMechanics.map(mech => mech.EmployeeID);
+                                    console.log(`Releasing mechanics: ${mechanicIds.join(', ')}`);
+                                    
+                                    // Step 7.4: Update attendances table to set isWorking = 0 for all assigned mechanics
+                                    const updateAttendancesQuery = `
+                                        UPDATE attendances 
+                                        SET isWorking = 0
+                                        WHERE EmployeeID IN (?)`;
+                                    
+                                    db.query(updateAttendancesQuery, [mechanicIds], (err, attendancesResult) => {
+                                        if (err) {
+                                            db.rollback(() => {
+                                                console.error("Error updating attendances:", err);
+                                                return res.status(500).json({ 
+                                                    success: false, 
+                                                    message: "Error updating attendances", 
+                                                    error: err 
+                                                });
+                                            });
+                                            return;
+                                        }
+
+                                        console.log(`Updated attendance status for ${attendancesResult.affectedRows} mechanics`);
+
+                                        // Commit the transaction
+                                        db.commit(err => {
+                                            if (err) {
+                                                db.rollback(() => {
+                                                    console.error("Error committing transaction:", err);
+                                                    return res.status(500).json({ 
+                                                        success: false, 
+                                                        message: "Error committing transaction", 
+                                                        error: err 
+                                                    });
+                                                });
+                                                return;
+                                            }
+
+                                            console.log(`Transaction committed successfully with mechanics released`);
+                                            // Success response
+                                            return res.status(200).json({ 
+                                                success: true, 
+                                                message: "Job card finished successfully and mechanics released", 
+                                                jobCardId: JobCardID,
+                                                completedBy: mechanicId,
+                                                completedAt: new Date(),
+                                                releasedMechanics: mechanicIds,
+                                                currentMileage: serviceMilleage,
+                                                nextServiceMileage: nextMileage,
+                                                vehicleId: vehicleID
+                                            });
+                                        });
                                     });
                                 });
                             });
@@ -760,6 +857,77 @@ router.put("/finish-job/:JobCardID", authenticateToken, authorizeRoles(["Mechani
         });
     }
 });
+
+router.post("/reports/save", authenticateToken, authorizeRoles(["Admin"]), async (req, res) => {
+    const { reportType, startDate, endDate, department, reportData } = req.body;
+    const employeeId = req.user.EmployeeID;
+    
+    try {
+        // Generate a unique report ID
+        const date = new Date();
+        const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
+        
+        // Get the count of reports generated today
+        const countQuery = `
+            SELECT COUNT(*) as count 
+            FROM Reports 
+            WHERE DATE(GeneratedDate) = CURDATE()
+        `;
+        
+        db.query(countQuery, [], (err, countResult) => {
+            if (err) {
+                console.error("Error counting reports:", err);
+                return res.status(500).json({ success: false, message: "Database error" });
+            }
+            
+            const count = countResult[0].count + 1;
+            const reportId = `REP-${dateStr}-${count.toString().padStart(2, '0')}`;
+            
+            // Insert the report
+            const insertQuery = `
+                INSERT INTO Reports (
+                    ReportID, ReportType, StartDate, EndDate, Department,
+                    Transactions, Revenue, ServicesCompleted, PartsSold,
+                    ServiceRevenue, PartsRevenue, GeneratedBy, ReportData
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `;
+            
+            const params = [
+                reportId,
+                reportType,
+                startDate,
+                endDate,
+                department,
+                reportData.transactions || 0,
+                reportData.revenue || 0,
+                reportData.services || 0,
+                reportData.parts || 0,
+                reportData.serviceRevenue || 0,
+                reportData.partsRevenue || 0,
+                employeeId,
+                JSON.stringify(reportData)
+            ];
+            
+            db.query(insertQuery, params, (err, result) => {
+                if (err) {
+                    console.error("Error saving report:", err);
+                    return res.status(500).json({ success: false, message: "Failed to save report" });
+                }
+                
+                res.status(201).json({
+                    success: true,
+                    message: "Report saved successfully",
+                    reportId: reportId
+                });
+            });
+        });
+    } catch (error) {
+        console.error("Error in save report:", error);
+        res.status(500).json({ success: false, message: "Server error" });
+    }
+});
+
+
 
 
 

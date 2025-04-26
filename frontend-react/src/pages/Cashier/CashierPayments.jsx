@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import axiosInstance from '../../utils/AxiosInstance';
 import CreateInvoiceCard from '../../components/Cards/CreateInvoiceCard';
+import InvoiceCard from '../../components/Cards/InvoiceCard';
 
 const CashierPayments = () => {
   const [jobCards, setJobCards] = useState([]);
-  const [invoices, setInvoices] = useState([]);
+  const [pendingInvoices, setPendingInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [invoiceLoading, setInvoiceLoading] = useState(true);
 
   // Fetch finished job cards on mount
   useEffect(() => {
@@ -24,14 +26,44 @@ const CashierPayments = () => {
         setLoading(false);
       }
     };
+    
+    const fetchPendingInvoices = async () => {
+      setInvoiceLoading(true);
+      try {
+        const res = await axiosInstance.get('/api/cashier/pending-invoices');
+        if (res.data.success) {
+          setPendingInvoices(res.data.data || []);
+        } else {
+          setPendingInvoices([]);
+        }
+      } catch (err) {
+        console.error("Error fetching pending invoices:", err);
+        setPendingInvoices([]);
+      } finally {
+        setInvoiceLoading(false);
+      }
+    };
+    
     fetchJobCards();
-    // Optionally, fetch invoices here if you have an endpoint
-    // setInvoices([...]);
+    fetchPendingInvoices();
   }, []);
+
+  const handlePaymentProcessed = async () => {
+    // Refresh the pending invoices list after payment
+    try {
+      const res = await axiosInstance.get('/api/customers/pending-invoices');
+      if (res.data.success) {
+        setPendingInvoices(res.data.data || []);
+      }
+    } catch (err) {
+      console.error("Error refreshing pending invoices:", err);
+    }
+  };
 
   return (
     <div className="container mx-auto p-4">
       <h1 className="text-2xl font-bold mb-6 text-gray-800">Cashier Payments</h1>
+      
       <h2 className="text-xl font-semibold mb-3 text-gray-700">Finished Job Cards</h2>
       {loading ? (
         <div className="text-center text-gray-500 py-8">Loading...</div>
@@ -45,8 +77,25 @@ const CashierPayments = () => {
         </div>
       )}
 
+      <h2 className="text-xl font-semibold mb-3 text-gray-700">Pending Invoices</h2>
+      {invoiceLoading ? (
+        <div className="text-center text-gray-500 py-8">Loading pending invoices...</div>
+      ) : pendingInvoices.length === 0 ? (
+        <div className="text-center text-gray-500 py-8">No pending invoices found.</div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          {pendingInvoices.map(invoice => (
+            <InvoiceCard 
+              key={invoice.Invoice_ID} 
+              invoice={invoice} 
+              onPaymentProcessed={handlePaymentProcessed}
+            />
+          ))}
+        </div>
+      )}
+
       <h2 className="text-xl font-semibold mb-3 text-gray-700">Invoices</h2>
-      {/* Dummy table, replace with your own invoice fetching logic */}
+      {/* Existing invoice table code */}
       <div className="overflow-x-auto rounded-xl shadow-lg bg-white">
         <table className="w-full text-sm">
           <thead>
@@ -59,21 +108,7 @@ const CashierPayments = () => {
             </tr>
           </thead>
           <tbody>
-            {invoices.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="py-4 text-center text-gray-500">No invoices found.</td>
-              </tr>
-            ) : (
-              invoices.map(inv => (
-                <tr key={inv.invoiceID} className="border-b hover:bg-gray-50">
-                  <td className="py-2 px-4">{inv.invoiceID}</td>
-                  <td className="py-2 px-4">{inv.jobCardID}</td>
-                  <td className="py-2 px-4">{inv.date}</td>
-                  <td className="py-2 px-4">Rs. {inv.total}</td>
-                  <td className="py-2 px-4">{inv.status}</td>
-                </tr>
-              ))
-            )}
+            {/* Your existing invoice table rows */}
           </tbody>
         </table>
       </div>

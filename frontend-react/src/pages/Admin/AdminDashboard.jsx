@@ -19,22 +19,133 @@ const AdminDashboard = () => {
   const [serviceDistribution, setServiceDistribution] = useState([]);
   const [revenueByDepartment, setRevenueByDepartment] = useState([]);
 
-  // Mock data - would be replaced with actual API calls
   const fetchDashboardData = async () => {
     setIsLoading(true);
     try {
-      // Simulate API calls
-      // In production, replace with actual API endpoints
-      
-      // Mock dashboard summary data
-      setDashboardData({
-        totalSales: 147250,
-        totalAppointments: 326,
-        totalEmployees: 42,
-        totalServices: 589,
-        salesGrowth: 12.5,
-        appointmentGrowth: 8.3
-      });
+      // Fetch monthly sales data from API
+      const TotalSalesResponse = await axiosInstance.get('/api/reports/this-month-sales');
+      console.log("API Response:", TotalSalesResponse.data);
+
+// Check if the response has the expected structure
+          if (TotalSalesResponse.data && TotalSalesResponse.data.totalSales) {
+            const salesValue = parseFloat(TotalSalesResponse.data.totalSales);
+            console.log("Parsed Sales Value:", salesValue);
+            
+            if (!isNaN(salesValue)) {
+              setDashboardData(prevData => ({
+                ...prevData,
+                totalSales: salesValue
+              }));
+            } else {
+              console.error("Failed to parse sales value:", TotalSalesResponse.data.totalSales);
+              setDashboardData(prevData => ({
+                ...prevData,
+                totalSales: 0
+              }));
+            }
+          } else {
+            console.error("Unexpected API response format:", TotalSalesResponse.data);
+            setDashboardData(prevData => ({
+              ...prevData,
+              totalSales: 0
+            }));
+          }
+
+          const TotalAppointmentsResponse = await axiosInstance.get('/api/reports/this-month-appointments');
+          console.log("API Response (Appointments):", TotalAppointmentsResponse.data);
+
+          if (TotalAppointmentsResponse.data && TotalAppointmentsResponse.data.totalAppointments) {
+            const appointmentsValue = parseInt(TotalAppointmentsResponse.data.totalAppointments);
+            console.log("Parsed Appointments Value:", appointmentsValue);
+            
+            if (!isNaN(appointmentsValue)) {
+              setDashboardData(prevData => ({
+                ...prevData,
+                totalAppointments: appointmentsValue
+              }));
+            } else {
+              console.error("Failed to parse appointments value:", TotalAppointmentsResponse.data.totalAppointments);
+              setDashboardData(prevData => ({
+                ...prevData,
+                totalAppointments: 0
+              }));
+            }
+          } else {
+            console.error("Unexpected API response format for appointments:", TotalAppointmentsResponse.data);
+            setDashboardData(prevData => ({
+              ...prevData,
+              totalAppointments: 0
+            }));
+          }
+
+
+          // Inside fetchDashboardData function
+          const monthlySalesResponse = await axiosInstance.get('/api/reports/monthly-sales');
+          console.log("Monthly Sales Data:", monthlySalesResponse.data);
+
+          if (Array.isArray(monthlySalesResponse.data) && monthlySalesResponse.data.length > 0) {
+            // Find the index of April to reorder the months starting from April
+            const monthsOrder = ["January", "February", "March", "April", "May", "June", 
+                                "July", "August", "September", "October", "November", "December"];
+            const aprilIndex = monthsOrder.indexOf("April");
+            
+            // Reorder months to start from April
+            const reorderedMonths = [
+              ...monthsOrder.slice(aprilIndex),
+              ...monthsOrder.slice(0, aprilIndex)
+            ];
+            
+            // Create a map of the API data for easy lookup
+            const salesByMonth = {};
+            monthlySalesResponse.data.forEach(item => {
+              salesByMonth[item.month] = parseFloat(item.totalSales);
+            });
+            
+            // Create the chart data array starting from April
+            const chartData = reorderedMonths.map(month => ({
+              month: month.substring(0, 3), // Abbreviate month names to first 3 letters
+              sales: salesByMonth[month] || 0 // Use 0 if no data for that month
+            }));
+            
+            setMonthlySales(chartData);
+          } else {
+            console.error("Unexpected API response format:", monthlySalesResponse.data);
+            // Fallback to mock data if needed
+          }
+
+
+          // Add this to your fetchDashboardData function
+          const employeeCountResponse = await axiosInstance.get('/api/reports/count-employees');
+          console.log("Employee Count Response:", employeeCountResponse.data);
+
+          // Check if the response has the expected structure
+          if (employeeCountResponse.data && employeeCountResponse.data.employee_count !== undefined) {
+            const employeeCount = parseInt(employeeCountResponse.data.employee_count);
+            console.log("Parsed Employee Count:", employeeCount);
+            
+            if (!isNaN(employeeCount)) {
+              setDashboardData(prevData => ({
+                ...prevData,
+                totalEmployees: employeeCount
+              }));
+            } else {
+              console.error("Failed to parse employee count:", employeeCountResponse.data.totalEmployees);
+              setDashboardData(prevData => ({
+                ...prevData,
+                totalEmployees: 0
+              }));
+            }
+          } else {
+            console.error("Unexpected API response format for employee count:", employeeCountResponse.data);
+            setDashboardData(prevData => ({
+              ...prevData,
+              totalEmployees: 0
+            }));
+          }
+
+
+
+
 
       // Mock top employees data
       setTopEmployees([
@@ -46,20 +157,7 @@ const AdminDashboard = () => {
       ]);
 
       // Mock monthly sales data
-      setMonthlySales([
-        { month: 'Jan', sales: 9800 },
-        { month: 'Feb', sales: 10200 },
-        { month: 'Mar', sales: 11500 },
-        { month: 'Apr', sales: 10800 },
-        { month: 'May', sales: 12100 },
-        { month: 'Jun', sales: 12800 },
-        { month: 'Jul', sales: 13400 },
-        { month: 'Aug', sales: 12900 },
-        { month: 'Sep', sales: 14300 },
-        { month: 'Oct', sales: 13800 },
-        { month: 'Nov', sales: 14600 },
-        { month: 'Dec', sales: 15200 }
-      ]);
+      
 
       // Mock service distribution data
       setServiceDistribution([
@@ -110,7 +208,7 @@ const AdminDashboard = () => {
             <div className="bg-white/70 backdrop-blur-xl rounded-xl border border-[#944EF8]/10 p-5 shadow-md hover:shadow-lg transition-all duration-300">
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="text-gray-500 text-sm font-medium">Total Sales</p>
+                  <p className="text-gray-500 text-sm font-medium">Total Sales <span className="text-xs">({new Date().toLocaleString('default', { month: 'long' })} 2025)</span></p>
                   <h3 className="text-2xl font-bold text-gray-800 mt-1">${dashboardData.totalSales.toLocaleString()}</h3>
                   <div className="flex items-center mt-2">
                     {dashboardData.salesGrowth > 0 ? (
@@ -200,22 +298,25 @@ const AdminDashboard = () => {
               <h3 className="text-lg font-semibold text-gray-800 mb-4">Monthly Sales</h3>
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={monthlySales}
-                    margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="month" />
-                    <YAxis />
-                    <Tooltip 
-                      contentStyle={{
-                        backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                        border: '1px solid #944EF8',
-                        borderRadius: '8px'
-                      }}
-                      formatter={(value) => [`$${value}`, 'Sales']}
-                    />
-                    <Legend />
-                    <Line type="monotone" dataKey="sales" stroke="#944EF8" activeDot={{ r: 8 }} />
-                  </LineChart>
+                <LineChart data={monthlySales} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis dataKey="month" />
+                      <YAxis 
+                        domain={[0, 500000]} // Set minimum to 0 and maximum to 500,000 (5 lakhs)
+                        tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} // Format as $Xk for readability
+                      />
+                      <Tooltip 
+                        contentStyle={{
+                          backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                          border: '1px solid #944EF8',
+                          borderRadius: '8px'
+                        }}
+                        formatter={(value) => [`$${value.toLocaleString()}`, 'Sales']}
+                      />
+                      <Legend />
+                      <Line type="monotone" dataKey="sales" stroke="#944EF8" activeDot={{ r: 8 }} />
+                    </LineChart>
+
                 </ResponsiveContainer>
               </div>
             </div>

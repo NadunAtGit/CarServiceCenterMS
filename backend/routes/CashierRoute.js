@@ -1514,6 +1514,53 @@ router.delete('/services/:serviceId', authenticateToken, authorizeRoles(["Admin"
     });
 }); 
 
+router.put("/confirm-cash-payment/:InvoiceID", authenticateToken,authorizeRoles(['Cashier']), async (req, res) => {
+    try {
+      const { InvoiceID } = req.params;
+      
+      // Update the invoice status to "Paid" and set the payment method to "Cash"
+      const updateQuery = `
+        UPDATE Invoice 
+        SET  PaymentMethod = 'Cash',
+            PaidStatus = 'Paid',
+            PaymentDate = CURRENT_TIMESTAMP
+        WHERE Invoice_ID = ?
+      `;
+      
+      db.query(updateQuery, [InvoiceID], (err, result) => {
+        if (err) {
+          console.error("Database error:", err);
+          return res.status(500).json({
+            success: false,
+            message: "Failed to update invoice payment status",
+            error: err.message
+          });
+        }
+        
+        if (result.affectedRows === 0) {
+          return res.status(404).json({
+            success: false,
+            message: "Invoice not found or already paid"
+          });
+        }
+        
+        return res.status(200).json({
+          success: true,
+          message: "Invoice marked as paid successfully",
+          invoiceId: InvoiceID
+        });
+      });
+      
+    } catch (error) {
+      console.error("Error updating invoice payment:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to process payment",
+        error: error.message
+      });
+    }
+  });
+
 
 
 
@@ -1632,8 +1679,8 @@ router.post("/create-invoice/:JobCardID", authenticateToken, authorizeRoles(["Ad
         // 8. Calculate total cost
         const subtotal = totalServiceCost + totalPartsCost;
         const taxRate = 0.15;
-        const taxAmount = subtotal * taxRate;
-        const total = subtotal + taxAmount;
+        // const taxAmount = subtotal * taxRate;
+        const total = subtotal;
 
         // 9. Insert the invoice into the database
         const insertInvoiceQuery = `
@@ -1678,8 +1725,6 @@ router.post("/create-invoice/:JobCardID", authenticateToken, authorizeRoles(["Ad
             totalServiceCost,
             totalPartsCost,
             subtotal,
-            taxRate: taxRate * 100,
-            taxAmount,
             total,
             status: "Pending",
             generatedBy: req.user.employeeId
@@ -1702,7 +1747,62 @@ router.post("/create-invoice/:JobCardID", authenticateToken, authorizeRoles(["Ad
 });
 
 
-
+router.get("/pending-invoices", authenticateToken, authorizeRoles(['Cashier']), async (req, res) => {
+    try {
+      // Modified query to get ALL pending invoices without customer filter
+      const query = `
+        SELECT 
+          i.Invoice_ID, 
+          i.Total, 
+          i.Parts_Cost, 
+          i.Labour_Cost, 
+          i.GeneratedDate,
+          i.PaidStatus, 
+          j.JobCardID, 
+          a.AppointmentID, 
+          v.VehicleNo, 
+          v.Model,
+          c.FirstName, 
+          c.SecondName,
+          c.CustomerID,
+          c.Telephone
+        FROM Invoice i
+        INNER JOIN JobCards j ON i.JobCard_ID = j.JobCardID
+        INNER JOIN Appointments a ON j.AppointmentID = a.AppointmentID
+        INNER JOIN Vehicles v ON a.VehicleID = v.VehicleNo
+        INNER JOIN Customers c ON a.CustomerID = c.CustomerID
+        WHERE i.PaidStatus = 'Pending' AND i.PaymentMethod="Cash"
+        ORDER BY i.GeneratedDate DESC
+      `;
+      
+      db.query(query, [], (err, results) => {
+        if (err) {
+          console.error("Database error:", err);
+          return res.status(500).json({
+            success: false,
+            message: "Failed to fetch pending invoices",
+            error: err.message
+          });
+        }
+        
+        return res.status(200).json({
+          success: true,
+          message: results.length > 0 ? "Pending invoices retrieved successfully" : "No pending invoices found",
+          count: results.length,
+          data: results
+        });
+      });
+      
+    } catch (error) {
+      console.error("Error fetching pending invoices:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to fetch pending invoices",
+        error: error.message
+      });
+    }
+  });
+  
 
 
 

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FiDownload, FiPrinter, FiFilter, FiCalendar } from 'react-icons/fi';
+import axiosInstance from '../../utils/AxiosInstance';
 
 const AdminReports = () => {
   const [reportType, setReportType] = useState('daily');
@@ -8,42 +9,11 @@ const AdminReports = () => {
     end: ''
   });
   const [department, setDepartment] = useState('all');
-
-  // Mock data - replace with API calls
-  const summaryData = {
-    daily: {
-      title: 'Daily Summary',
-      date: 'April 7, 2025',
-      transactions: 342,
-      revenue: '$8,745.25',
-      services: 156,
-      parts: 186
-    },
-    weekly: {
-      title: 'Weekly Summary',
-      date: 'Mar 31 - Apr 6, 2025',
-      transactions: 1842,
-      revenue: '$42,567.80',
-      services: 856,
-      parts: 986
-    },
-    monthly: {
-      title: 'Monthly Summary',
-      date: 'March 2025',
-      transactions: 7453,
-      revenue: '$192,845.60',
-      services: 3452,
-      parts: 4001
-    }
-  };
-
-  const recentReports = [
-    { id: 'ADM-REP-0425', date: 'Apr 7, 2025', type: 'Daily', department: 'All', transactions: 342, revenue: '$8,745.25' },
-    { id: 'ADM-REP-0424', date: 'Apr 6, 2025', type: 'Daily', department: 'Service', transactions: 198, revenue: '$5,120.50' },
-    { id: 'ADM-REP-0423', date: 'Apr 5, 2025', type: 'Daily', department: 'Parts', transactions: 144, revenue: '$3,624.75' },
-    { id: 'ADM-REP-0415', date: 'Apr 1-7, 2025', type: 'Weekly', department: 'All', transactions: 1842, revenue: '$42,567.80' },
-    { id: 'ADM-REP-0325', date: 'Mar 1-31, 2025', type: 'Monthly', department: 'All', transactions: 7453, revenue: '$192,845.60' }
-  ];
+  const [dailySummary, setDailySummary] = useState(null);
+  const [weeklySummary, setWeeklySummary] = useState(null);
+  const [monthlySummary, setMonthlySummary] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [recentReports, setRecentReports] = useState([]);
 
   const departmentOptions = [
     { value: 'all', label: 'All Departments' },
@@ -53,9 +23,100 @@ const AdminReports = () => {
     { value: 'finance', label: 'Finance' }
   ];
 
-  const handleGenerateReport = () => {
-    // In a real app, this would call an API to generate the report
-    alert(`Generating ${reportType} report for ${department} department from ${dateRange.start} to ${dateRange.end}`);
+  useEffect(() => {
+    const fetchSummaryData = async () => {
+      setIsLoading(true);
+      try {
+        // Get today's date in YYYY-MM-DD format
+        const today = new Date().toISOString().split('T')[0];
+        
+        // Fetch daily summary
+        const dailyRes = await axiosInstance.get(`/api/reports/daily?date=${today}`);
+        setDailySummary(dailyRes.data.data);
+        
+        // Fetch weekly summary
+        const weeklyRes = await axiosInstance.get('/api/reports/weekly');
+        setWeeklySummary(weeklyRes.data.data);
+        
+        // Get current month and year
+        const currentYear = new Date().getFullYear();
+        const currentMonth = new Date().getMonth() + 1; // JavaScript months are 0-indexed
+        
+        // Fetch monthly summary
+        const monthlyRes = await axiosInstance.get(`/api/reports/monthly?year=${currentYear}&month=${currentMonth}`);
+        setMonthlySummary(monthlyRes.data.data);
+
+        // Mock recent reports data - in a real app, you would fetch this from an API
+        setRecentReports([
+          { id: 'REP-20250426-01', date: 'Apr 26, 2025', type: 'Daily', department: 'All', transactions: 342, revenue: '$8,745.25' },
+          { id: 'REP-20250425-01', date: 'Apr 25, 2025', type: 'Daily', department: 'Service', transactions: 198, revenue: '$5,120.50' },
+          { id: 'REP-20250424-01', date: 'Apr 24, 2025', type: 'Daily', department: 'Parts', transactions: 144, revenue: '$3,624.75' },
+          { id: 'REP-20250420-01', date: 'Apr 20-26, 2025', type: 'Weekly', department: 'All', transactions: 1842, revenue: '$42,567.80' },
+          { id: 'REP-20250401-01', date: 'Apr 1-30, 2025', type: 'Monthly', department: 'All', transactions: 7453, revenue: '$192,845.60' }
+        ]);
+      } catch (error) {
+        console.error("Error fetching summary data:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchSummaryData();
+  }, []);
+
+  const handleDownloadReport = async (reportType, customParams = {}) => {
+    try {
+      let endpoint = `/api/reports/${reportType}/download`;
+      let params = {};
+      
+      // Add custom parameters if provided
+      if (Object.keys(customParams).length > 0) {
+        params = { ...customParams };
+      }
+      
+      // Make API call to generate and download PDF
+      const response = await axiosInstance.get(endpoint, {
+        params,
+        responseType: 'blob' // Important for handling file downloads
+      });
+      
+      // Create a blob URL and trigger download
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // Set filename based on report type
+      const date = new Date().toISOString().split('T')[0];
+      link.download = `${reportType}_report_${date}.pdf`;
+      
+      document.body.appendChild(link);
+      link.click();
+      
+      // Clean up
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error(`Error downloading ${reportType} report:`, error);
+      alert(`Failed to download report. Please try again.`);
+    }
+  };
+
+  const handleGenerateCustomReport = async () => {
+    if (!dateRange.start || !dateRange.end) {
+      alert('Please select both start and end dates');
+      return;
+    }
+    
+    // Prepare parameters for custom report
+    const params = {
+      startDate: dateRange.start,
+      endDate: dateRange.end,
+      department: department
+    };
+    
+    // Call the download handler with custom parameters
+    handleDownloadReport('custom', params);
   };
 
   return (
@@ -67,42 +128,118 @@ const AdminReports = () => {
 
       {/* Quick Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        {Object.entries(summaryData).map(([key, data]) => (
-          <div key={key} className="bg-white rounded-xl border border-[#944EF8]/20 p-5 shadow-sm hover:shadow-md transition-all">
-            <h3 className="font-semibold text-gray-800">{data.title}</h3>
-            <p className="text-gray-500 text-sm mb-4">{data.date}</p>
-            
-            <div className="space-y-3">
-              <div className="flex justify-between">
-                <span>Transactions</span>
-                <span className="font-medium">{data.transactions}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Total Revenue</span>
-                <span className="font-medium">{data.revenue}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Services</span>
-                <span className="font-medium">{data.services}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Parts Sold</span>
-                <span className="font-medium">{data.parts}</span>
-              </div>
-            </div>
-            
-            <div className="mt-4 flex space-x-2">
-              <button className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-[#944EF8]/10 text-[#944EF8] rounded hover:bg-[#944EF8]/20">
-                <FiDownload size={16} />
-                Export
-              </button>
-              <button className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-[#944EF8] text-white rounded hover:bg-[#7b3be0]">
-                <FiPrinter size={16} />
-                Print
-              </button>
-            </div>
+        {isLoading ? (
+          <div className="col-span-3 flex justify-center py-8">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#944EF8]"></div>
           </div>
-        ))}
+        ) : (
+          <>
+            {/* Daily Summary Card */}
+            <div className="bg-white rounded-xl border border-[#944EF8]/20 p-5 shadow-sm hover:shadow-md transition-all">
+              <h3 className="font-semibold text-gray-800">{dailySummary?.title || "Daily Summary"}</h3>
+              <p className="text-gray-500 text-sm mb-4">{dailySummary?.date || "Today"}</p>
+              
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span>Transactions</span>
+                  <span className="font-medium">{dailySummary?.transactions || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Total Revenue</span>
+                  <span className="font-medium">${(dailySummary?.revenue || 0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Services</span>
+                  <span className="font-medium">{dailySummary?.services || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Parts Sold</span>
+                  <span className="font-medium">{dailySummary?.parts || 0}</span>
+                </div>
+              </div>
+              
+              <div className="mt-4">
+                <button 
+                  onClick={() => handleDownloadReport('daily')}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-[#944EF8] text-white rounded hover:bg-[#7b3be0]"
+                >
+                  <FiDownload size={16} />
+                  Download PDF
+                </button>
+              </div>
+            </div>
+
+            {/* Weekly Summary Card */}
+            <div className="bg-white rounded-xl border border-[#944EF8]/20 p-5 shadow-sm hover:shadow-md transition-all">
+              <h3 className="font-semibold text-gray-800">{weeklySummary?.title || "Weekly Summary"}</h3>
+              <p className="text-gray-500 text-sm mb-4">{weeklySummary?.date || "This Week"}</p>
+              
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span>Transactions</span>
+                  <span className="font-medium">{weeklySummary?.transactions || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Total Revenue</span>
+                  <span className="font-medium">${(weeklySummary?.revenue || 0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Services</span>
+                  <span className="font-medium">{weeklySummary?.services || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Parts Sold</span>
+                  <span className="font-medium">{weeklySummary?.parts || 0}</span>
+                </div>
+              </div>
+              
+              <div className="mt-4">
+                <button 
+                  onClick={() => handleDownloadReport('weekly')}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-[#944EF8] text-white rounded hover:bg-[#7b3be0]"
+                >
+                  <FiDownload size={16} />
+                  Download PDF
+                </button>
+              </div>
+            </div>
+
+            {/* Monthly Summary Card */}
+            <div className="bg-white rounded-xl border border-[#944EF8]/20 p-5 shadow-sm hover:shadow-md transition-all">
+              <h3 className="font-semibold text-gray-800">{monthlySummary?.title || "Monthly Summary"}</h3>
+              <p className="text-gray-500 text-sm mb-4">{monthlySummary?.date || "This Month"}</p>
+              
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span>Transactions</span>
+                  <span className="font-medium">{monthlySummary?.transactions || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Total Revenue</span>
+                  <span className="font-medium">${(monthlySummary?.revenue || 0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Services</span>
+                  <span className="font-medium">{monthlySummary?.services || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Parts Sold</span>
+                  <span className="font-medium">{monthlySummary?.parts || 0}</span>
+                </div>
+              </div>
+              
+              <div className="mt-4">
+                <button 
+                  onClick={() => handleDownloadReport('monthly')}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-[#944EF8] text-white rounded hover:bg-[#7b3be0]"
+                >
+                  <FiDownload size={16} />
+                  Download PDF
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Recent Reports Table */}
@@ -150,11 +287,11 @@ const AdminReports = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{report.revenue}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     <div className="flex space-x-2">
-                      <button className="text-[#944EF8] hover:text-[#7b3be0]">
+                      <button 
+                        className="text-[#944EF8] hover:text-[#7b3be0]"
+                        onClick={() => handleDownloadReport(report.type.toLowerCase(), { reportId: report.id })}
+                      >
                         <FiDownload size={16} />
-                      </button>
-                      <button className="text-[#944EF8] hover:text-[#7b3be0]">
-                        <FiPrinter size={16} />
                       </button>
                     </div>
                   </td>
@@ -165,7 +302,7 @@ const AdminReports = () => {
         </div>
 
         <div className="mt-4 flex justify-between items-center">
-          <div className="text-sm text-gray-600">Showing 5 of 28 reports</div>
+          <div className="text-sm text-gray-600">Showing {recentReports.length} of {recentReports.length} reports</div>
           <div className="flex space-x-2">
             <button className="px-3 py-1 border rounded bg-gray-100 hover:bg-gray-200">Previous</button>
             <button className="px-3 py-1 border rounded bg-[#944EF8] text-white hover:bg-[#7b3be0]">Next</button>
@@ -233,12 +370,19 @@ const AdminReports = () => {
         </div>
 
         <div className="flex justify-end space-x-3">
-          <button className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100">
+          <button 
+            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100"
+            onClick={() => {
+              setDateRange({ start: '', end: '' });
+              setDepartment('all');
+              setReportType('daily');
+            }}
+          >
             Reset
           </button>
           <button 
             className="px-4 py-2 bg-[#944EF8] text-white rounded-lg hover:bg-[#7b3be0]"
-            onClick={handleGenerateReport}
+            onClick={handleGenerateCustomReport}
           >
             Generate Report
           </button>

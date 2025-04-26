@@ -170,12 +170,12 @@ router.get("/get-vehicles",authenticateToken,async(req,res)=>{
     }
 });
 
-router.post("/add-vehicle", authenticateToken,authorizeRoles(['Customer']),  async (req, res) => {
+router.post("/add-vehicle", authenticateToken, authorizeRoles(['Customer']), async (req, res) => {
     try {
         const { customerId } = req.user;
-        const { VehicleNo, Model, Type, VehiclePicUrl } = req.body;  // Include VehiclePicUrl if needed
+        const { VehicleNo, Model, Type, VehiclePicUrl, CurrentMilleage } = req.body;
 
-        if (!VehicleNo || !Model || !Type) {
+        if (!VehicleNo || !Model || !Type || CurrentMilleage === undefined) {
             return res.status(400).json({ error: "Missing required fields" });
         }
 
@@ -188,13 +188,15 @@ router.post("/add-vehicle", authenticateToken,authorizeRoles(['Customer']),  asy
             }
 
             if (result.length > 0) {
-                // Vehicle number already exists
                 return res.status(400).json({ error: "Vehicle number already registered" });
             }
 
-            // Insert the new vehicle if no duplicate found
-            const insertQuery = "INSERT INTO Vehicles (VehicleNo, Model, Type, CustomerID, VehiclePicUrl) VALUES (?, ?, ?, ?, ?)";
-            const values = [VehicleNo, Model, Type, customerId, VehiclePicUrl || null];  // Use null if no VehiclePicUrl
+            // Insert the new vehicle
+            const insertQuery = `
+                INSERT INTO Vehicles (VehicleNo, Model, Type, CustomerID, VehiclePicUrl, CurrentMilleage) 
+                VALUES (?, ?, ?, ?, ?, ?)
+            `;
+            const values = [VehicleNo, Model, Type, customerId, VehiclePicUrl || null, CurrentMilleage];
 
             db.query(insertQuery, values, (err, result) => {
                 if (err) {
@@ -209,6 +211,52 @@ router.post("/add-vehicle", authenticateToken,authorizeRoles(['Customer']),  asy
         res.status(500).json({ message: "Internal server error" });
     }
 });
+
+router.put("/update-milleage/:VehicleNo", authenticateToken, authorizeRoles(['Customer']), async (req, res) => {
+    try {
+        const { VehicleNo } = req.params;
+        const { CurrentMilleage } = req.body;
+        const { customerId } = req.user;
+
+        if (CurrentMilleage === undefined) {
+            return res.status(400).json({ error: "CurrentMilleage is required" });
+        }
+
+        // Check if the vehicle belongs to the customer and get the current mileage
+        const checkQuery = "SELECT CurrentMilleage FROM Vehicles WHERE VehicleNo = ? AND CustomerID = ?";
+        db.query(checkQuery, [VehicleNo, customerId], (err, result) => {
+            if (err) {
+                console.error("Error checking vehicle:", err);
+                return res.status(500).json({ error: err.message });
+            }
+
+            if (result.length === 0) {
+                return res.status(403).json({ error: "You are not authorized to update this vehicle's mileage" });
+            }
+
+            const existingMileage = result[0].CurrentMilleage;
+            if (CurrentMilleage <= existingMileage) {
+                return res.status(400).json({ error: `New mileage (${CurrentMilleage}) must be greater than existing mileage (${existingMileage})` });
+            }
+
+            // Update mileage
+            const updateQuery = "UPDATE Vehicles SET CurrentMilleage = ? WHERE VehicleNo = ?";
+            db.query(updateQuery, [CurrentMilleage, VehicleNo], (err, updateResult) => {
+                if (err) {
+                    console.error("Error updating mileage:", err);
+                    return res.status(500).json({ error: err.message });
+                }
+
+                res.status(200).json({ success: true, message: "Mileage updated successfully!" });
+            });
+        });
+    } catch (error) {
+        console.error("Error during /update-milleage:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
+
+
 
 router.get('/getcustomers', authenticateToken, authorizeRoles(["Admin", "Cashier"]), (req, res) => {
     const query = `SELECT CustomerID, FirstName, SecondName, Telephone, Email, Username FROM Customers`;
@@ -729,6 +777,210 @@ router.get("/getjobcard/:id", authenticateToken, async (req, res) => {
         });
     }
 });
+
+
+router.put("/pay-invoice-cash/:InvoiceID", authenticateToken, authorizeRoles(['Customer']), async (req, res) => {
+    try {
+      const { InvoiceID } = req.params;
+      
+      // Update the invoice status to "Paid" and set the payment method to "Cash"
+      const updateQuery = `
+        UPDATE Invoice 
+        SET  PaymentMethod = 'Cash',
+            PaymentDate = CURRENT_TIMESTAMP
+        WHERE Invoice_ID = ?
+      `;
+      
+      db.query(updateQuery, [InvoiceID], (err, result) => {
+        if (err) {
+          console.error("Database error:", err);
+          return res.status(500).json({
+            success: false,
+            message: "Failed to update invoice payment status",
+            error: err.message
+          });
+        }
+        
+        if (result.affectedRows === 0) {
+          return res.status(404).json({
+            success: false,
+            message: "Invoice not found or already paid"
+          });
+        }
+        
+        return res.status(200).json({
+          success: true,
+          message: "Invoice marked as paid successfully",
+          invoiceId: InvoiceID
+        });
+      });
+      
+    } catch (error) {
+      console.error("Error updating invoice payment:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to process payment",
+        error: error.message
+      });
+    }
+  });
+  
+
+// GET endpoint to retrieve pending invoices for the logged-in customer
+// Adjust the path to your database connection
+
+router.get("/pending-invoices", authenticateToken, async (req, res) => {
+  try {
+    const customerId = req.user.customerId; // Assuming the customer ID is stored in the token
+    
+    // Simplified query to get just pending invoices info
+    const query = `
+      SELECT i.Invoice_ID, i.Total, i.Parts_Cost, i.Labour_Cost, i.GeneratedDate, 
+             i.PaidStatus, j.JobCardID, a.AppointmentID, v.VehicleNo, v.Model
+      FROM Invoice i
+      INNER JOIN JobCards j ON i.JobCard_ID = j.JobCardID
+      INNER JOIN Appointments a ON j.AppointmentID = a.AppointmentID
+      INNER JOIN Vehicles v ON a.VehicleID = v.VehicleNo
+      WHERE a.CustomerID = ? AND i.PaidStatus = 'Pending'
+      ORDER BY i.GeneratedDate DESC
+    `;
+    
+    db.query(query, [customerId], (err, results) => {
+      if (err) {
+        console.error("Database error:", err);
+        return res.status(500).json({
+          success: false,
+          message: "Failed to fetch pending invoices",
+          error: err.message
+        });
+      }
+      
+      return res.status(200).json({
+        success: true,
+        message: results.length > 0 ? "Pending invoices retrieved successfully" : "No pending invoices found",
+        count: results.length,
+        data: results
+      });
+    });
+    
+  } catch (error) {
+    console.error("Error fetching pending invoices:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch pending invoices",
+      error: error.message
+    });
+  }
+});
+
+router.delete("/cancel-appointment/:AppointmentID", authenticateToken, authorizeRoles(['Customer']), async (req, res) => {
+    try {
+      const { AppointmentID } = req.params;
+      const customerId = req.user.customerId; // Using customerId from token
+      
+      console.log(`Attempting to cancel appointment ${AppointmentID} for customer ${customerId}`);
+      
+      // First, verify that the appointment belongs to the authenticated customer
+      const verifyQuery = `
+        SELECT a.*, j.JobCardID 
+        FROM Appointments a
+        LEFT JOIN JobCards j ON a.AppointmentID = j.AppointmentID
+        WHERE a.AppointmentID = ? AND a.CustomerID = ?
+      `;
+      
+      db.query(verifyQuery, [AppointmentID, customerId], (err, results) => {
+        if (err) {
+          console.error("Database error during verification:", err);
+          return res.status(500).json({
+            success: false,
+            message: "Failed to verify appointment ownership",
+            error: err.message
+          });
+        }
+        
+        console.log(`Verification results: ${JSON.stringify(results)}`);
+        
+        if (results.length === 0) {
+          console.log(`No appointment found with ID ${AppointmentID} for customer ${customerId}`);
+          return res.status(404).json({
+            success: false,
+            message: "Appointment not found or does not belong to you"
+          });
+        }
+        
+        // Check if the appointment has an associated job card
+        if (results[0].JobCardID) {
+          console.log(`Cannot cancel appointment ${AppointmentID} - JobCard ${results[0].JobCardID} already exists`);
+          return res.status(400).json({
+            success: false,
+            message: "Cannot cancel appointment that has already started processing"
+          });
+        }
+        
+        // Check appointment date to ensure it's not in the past
+        const appointmentDate = new Date(results[0].AppointmentDate);
+        const currentDate = new Date();
+        
+        console.log(`Appointment date: ${appointmentDate}, Current date: ${currentDate}`);
+        
+        if (appointmentDate < currentDate) {
+          console.log(`Cannot cancel past appointment ${AppointmentID}`);
+          return res.status(400).json({
+            success: false,
+            message: "Cannot cancel appointments that have already passed"
+          });
+        }
+        
+        // If all checks pass, proceed with cancellation
+        const cancelQuery = `
+          UPDATE Appointments 
+          SET Status = 'Cancelled'
+          WHERE AppointmentID = ?
+        `;
+        
+        console.log(`Executing cancellation query for appointment ${AppointmentID}`);
+        
+        db.query(cancelQuery, [AppointmentID], (err, result) => {
+          if (err) {
+            console.error("Database error during cancellation:", err);
+            return res.status(500).json({
+              success: false,
+              message: "Failed to cancel appointment",
+              error: err.message
+            });
+          }
+          
+          console.log(`Cancellation result: ${JSON.stringify(result)}`);
+          
+          if (result.affectedRows === 0) {
+            console.log(`No rows affected when cancelling appointment ${AppointmentID}`);
+            return res.status(404).json({
+              success: false,
+              message: "Appointment not found or already cancelled"
+            });
+          }
+          
+          console.log(`Successfully cancelled appointment ${AppointmentID}`);
+          return res.status(200).json({
+            success: true,
+            message: "Appointment cancelled successfully",
+            appointmentId: AppointmentID
+          });
+        });
+      });
+      
+    } catch (error) {
+      console.error("Unexpected error in cancel-appointment:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to cancel appointment",
+        error: error.message
+      });
+    }
+});
+  
+  
+  
 
 
 
