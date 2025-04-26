@@ -72,6 +72,9 @@ const generateEmployeeId = async (role) => {
             case "cashier":
                 prefix = "C";
                 break;
+            case "driver":
+                prefix = "D";
+                break;
             default:
                 return reject(new Error("Invalid role provided"));
         }

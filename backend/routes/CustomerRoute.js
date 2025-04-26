@@ -978,6 +978,151 @@ router.delete("/cancel-appointment/:AppointmentID", authenticateToken, authorize
       });
     }
 });
+
+router.post("/breakdown/request", authenticateToken, authorizeRoles(['Customer']), async (req, res) => {
+    try {
+      const { latitude, longitude, description, contactName, contactPhone } = req.body;
+      const customerId = req.user.customerId;
+      
+      // Validate required fields
+      if (!latitude || !longitude || !contactName || !contactPhone) {
+        return res.status(400).json({
+          success: false,
+          message: "Missing required fields. Please provide latitude, longitude, contactName, and contactPhone"
+        });
+      }
+      
+      // Generate a unique request ID
+      const date = new Date();
+      const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
+      const countQuery = "SELECT COUNT(*) as count FROM BreakdownRequests WHERE DATE(RequestTime) = CURDATE()";
+      
+      db.query(countQuery, [], (err, countResult) => {
+        if (err) {
+          console.error("Error counting breakdown requests:", err);
+          return res.status(500).json({ 
+            success: false, 
+            message: "Database error", 
+            error: err.message 
+          });
+        }
+        
+        const count = countResult[0].count + 1;
+        const requestId = `BDR-${dateStr}-${count.toString().padStart(2, '0')}`;
+        
+        // Insert the breakdown request
+        const insertQuery = `
+          INSERT INTO BreakdownRequests (
+            RequestID, CustomerID, Latitude, Longitude, Description, 
+            ContactName, ContactPhone, Status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending')
+        `;
+        
+        db.query(
+          insertQuery, 
+          [requestId, customerId, latitude, longitude, description, contactName, contactPhone],
+          (err, result) => {
+            if (err) {
+              console.error("Error creating breakdown request:", err);
+              return res.status(500).json({ 
+                success: false, 
+                message: "Failed to create breakdown request", 
+                error: err.message 
+              });
+            }
+            
+            res.status(201).json({
+              success: true,
+              message: "Breakdown request created successfully",
+              requestId: requestId
+            });
+          }
+        );
+      });
+    } catch (error) {
+      console.error("Error in breakdown request API:", error);
+      res.status(500).json({ 
+        success: false, 
+        message: "Server error", 
+        error: error.message 
+      });
+    }
+  });
+  
+
+  router.put("/breakdown/cancel/:requestId", authenticateToken, authorizeRoles(['Customer', 'Admin']), async (req, res) => {
+    try {
+      const { requestId } = req.params;
+      const customerId = req.user.customerId;
+      
+      // Check if request exists and belongs to the customer
+      const checkQuery = "SELECT Status, CustomerID FROM BreakdownRequests WHERE RequestID = ?";
+      
+      db.query(checkQuery, [requestId], (err, results) => {
+        if (err) {
+          console.error("Error checking breakdown request:", err);
+          return res.status(500).json({ 
+            success: false, 
+            message: "Database error", 
+            error: err.message 
+          });
+        }
+        
+        if (results.length === 0) {
+          return res.status(404).json({
+            success: false,
+            message: "Breakdown request not found"
+          });
+        }
+        
+        // If user is not admin, verify ownership
+        if (req.user.role !== 'Admin' && results[0].CustomerID !== customerId) {
+          return res.status(403).json({
+            success: false,
+            message: "You are not authorized to cancel this request"
+          });
+        }
+        
+        if (results[0].Status === 'Completed' || results[0].Status === 'Cancelled') {
+          return res.status(400).json({
+            success: false,
+            message: `Request is already ${results[0].Status} and cannot be cancelled`
+          });
+        }
+        
+        // Update the request status to cancelled
+        const updateQuery = `
+          UPDATE BreakdownRequests 
+          SET Status = 'Cancelled'
+          WHERE RequestID = ?
+        `;
+        
+        db.query(updateQuery, [requestId], (err, result) => {
+          if (err) {
+            console.error("Error cancelling breakdown request:", err);
+            return res.status(500).json({ 
+              success: false, 
+              message: "Failed to cancel breakdown request", 
+              error: err.message 
+            });
+          }
+          
+          res.status(200).json({
+            success: true,
+            message: "Breakdown request cancelled successfully",
+            requestId: requestId
+          });
+        });
+      });
+    } catch (error) {
+      console.error("Error in cancel breakdown request API:", error);
+      res.status(500).json({ 
+        success: false, 
+        message: "Server error", 
+        error: error.message 
+      });
+    }
+  });
   
   
   
