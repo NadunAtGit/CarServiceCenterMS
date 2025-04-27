@@ -14,13 +14,14 @@ const AddEmployee = ({ onClose, getEmployees }) => {
   const [role, setRole] = useState("");
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
+  const [department, setDepartment] = useState(""); // Added department state
   const [profilePic, setProfilePic] = useState(null); // Store the image file
   const [profilePicUrl, setProfilePicUrl] = useState(""); // Store the uploaded image URL
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
-    if (!name || !username || !email || !phone || !role || !password) {
+    if (!name || !username || !email || !phone || !role || !password || !department) {
       setError("Please fill all required fields");
       return;
     }
@@ -58,6 +59,7 @@ const AddEmployee = ({ onClose, getEmployees }) => {
         password,
         phone,
         role,
+        department, // Added department to payload
         profilePicUrl: uploadedImageUrl, // Send uploaded URL or default URL
       });
 
@@ -148,6 +150,20 @@ const AddEmployee = ({ onClose, getEmployees }) => {
           <option value="Service Advisor" className="bg-white text-gray-800">Service Advisor</option>
           <option value="Cashier" className="bg-white text-gray-800">Cashier</option>
           <option value="Driver" className="bg-white text-gray-800">Driver</option>
+        </select>
+
+        {/* Added new Department dropdown */}
+        <select
+          className="text-md text-gray-800 border p-2 rounded-xl border-[#944EF8]/30 bg-white/50 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#944EF8]/50 backdrop-blur-xl transition-all duration-300"
+          value={department}
+          onChange={(e) => setDepartment(e.target.value)}
+        >
+          <option value="" disabled className="bg-white text-gray-800">
+            Select Department
+          </option>
+          <option value="Repair" className="bg-white text-gray-800">Repair</option>
+          <option value="Maintenance" className="bg-white text-gray-800">Maintenance</option>
+          <option value="Detailing" className="bg-white text-gray-800">Detailing</option>
         </select>
 
         <button

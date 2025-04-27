@@ -120,8 +120,7 @@ const AdminEmployees = () => {
   
     try {
       const response = await axiosInstance.delete(`api/admin/delete-employee/${id}`);
-      console.log("Response:", response);
-  
+      
       if (response.data.success) {
         setAllEmployees((prevEmployees) =>
           prevEmployees.filter((employee) => employee.EmployeeID !== id)
@@ -132,7 +131,45 @@ const AdminEmployees = () => {
       }
     } catch (error) {
       console.error("Error deleting employee:", error);
-      alert("An error occurred while deleting the employee.");
+      
+      // Handle the case where employee has references
+      if (error.response && error.response.status === 400 && error.response.data.references) {
+        const { references } = error.response.data;
+        const totalRefs = references.total;
+        
+        const transferConfirm = window.confirm(
+          `This employee has ${totalRefs} references in other tables and cannot be deleted directly. Would you like to transfer these references to another employee?`
+        );
+        
+        if (transferConfirm) {
+          // You can either:
+          // 1. Open a modal to select another employee
+          // 2. Prompt for an employee ID
+          const transferId = prompt("Enter the Employee ID to transfer references to:");
+          
+          if (transferId) {
+            try {
+              const transferResponse = await axiosInstance.delete(`api/admin/delete-employee/${id}`, {
+                data: { transferToEmployeeId: transferId }
+              });
+              
+              if (transferResponse.data.success) {
+                setAllEmployees((prevEmployees) =>
+                  prevEmployees.filter((employee) => employee.EmployeeID !== id)
+                );
+                alert("Employee deleted successfully and references transferred!");
+              } else {
+                alert("Transfer failed: " + transferResponse.data.message);
+              }
+            } catch (transferError) {
+              console.error("Transfer error:", transferError);
+              alert("Failed to transfer references. Please try again with a valid employee ID.");
+            }
+          }
+        }
+      } else {
+        alert("An error occurred while deleting the employee.");
+      }
     } finally {
       setIsLoading(false);
     }

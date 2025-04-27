@@ -165,7 +165,8 @@ router.post("/employee-login", async (req, res) => {
                 return res.status(404).json({ error: true, message: "Employee not found" });
             }
 
-            const employee = result[0]; // The employee record from DB
+            const employee = result[0];
+            // The employee record from DB
 
             // Compare hashed password with the stored password
             const match = await bcrypt.compare(password, employee.Password);
@@ -173,10 +174,11 @@ router.post("/employee-login", async (req, res) => {
                 return res.status(400).json({ error: true, message: "Invalid password" });
             }
             console.log("🔹 Assigned Role in JWT:", employee.Role);
+            
 
             // Generate JWT token for the employee
             const accessToken = jwt.sign(
-                { EmployeeID: employee.EmployeeID, email: employee.email, role: employee.Role },
+                { EmployeeID: employee.EmployeeID, email: employee.email, role: employee.Role ,department:employee.Department},
                 process.env.ACCESS_TOKEN_SECRET, // Make sure to set this in your .env file
                 { expiresIn: "2h" } // Token expires in 1 hour
             );
@@ -200,23 +202,23 @@ router.post("/employee-login", async (req, res) => {
 
 router.post("/create-employee", authenticateToken, authorizeRoles(['Admin']), async (req, res) => {
     console.log("Request received:", req.body);
-    const { name, phone, role, username, password, email, profilePicUrl } = req.body;
+    const { name, phone, role, username, password, email, profilePicUrl, department } = req.body;
 
-// Convert to expected backend format
-            const Name = name;
-            const Phone = phone;
-            const Role = role;
-            const Username = username;
-            const Password = password;
-            const Email = email;
-            const ProfilePicUrl = profilePicUrl;
+    // Convert to expected backend format
+    const Name = name;
+    const Phone = phone;
+    const Role = role;
+    const Username = username;
+    const Password = password;
+    const Email = email;
+    const ProfilePicUrl = profilePicUrl;
+    const Department = department;
 
-            if (!Name || !Email || !Password || !Role || !Phone || !Username || !ProfilePicUrl && ProfilePicUrl !== "") {
-                console.log("Missing parameters");
-                return res.status(400).json({ error: true, message: "All parameters required" });
-            }
-            
-
+    if (!Name || !Email || !Password || !Role || !Phone || !Username || (ProfilePicUrl !== "" && !ProfilePicUrl) || !Department) {
+        console.log("Missing parameters");
+        return res.status(400).json({ error: true, message: "All parameters required" });
+    }
+    
     if (!validateEmail(Email)) {
         return res.status(400).json({ error: "Invalid email format" });
     }
@@ -244,11 +246,11 @@ router.post("/create-employee", authenticateToken, authorizeRoles(['Admin']), as
         // Hash the password
         const hashedPassword = await bcrypt.hash(Password, 10);
 
-        // Insert new employee into the database with Rating set to 0.0
-        const insertQuery = `INSERT INTO Employees (EmployeeID, Name, Phone, Role, Username, Password, Email, ProfilePicUrl, Rating) 
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        // Insert new employee into the database with Rating set to 0.0 and the Department
+        const insertQuery = `INSERT INTO Employees (EmployeeID, Name, Phone, Role, Username, Password, Email, ProfilePicUrl, Rating, Department)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
         await new Promise((resolve, reject) => {
-            db.query(insertQuery, [EmployeeID, Name, Phone, Role, Username, hashedPassword, Email, ProfilePicUrl, 0.0], (err, result) => {
+            db.query(insertQuery, [EmployeeID, Name, Phone, Role, Username, hashedPassword, Email, ProfilePicUrl, 0.0, Department], (err, result) => {
                 if (err) return reject(err);
                 resolve(result);
             });
@@ -258,7 +260,7 @@ router.post("/create-employee", authenticateToken, authorizeRoles(['Admin']), as
 
         // Generate JWT Token
         const accessToken = jwt.sign(
-            { EmployeeID, Role, Email },
+            { EmployeeID, Role, Email, Department },
             process.env.ACCESS_TOKEN_SECRET,
             { expiresIn: "72h" }
         );
@@ -270,6 +272,7 @@ router.post("/create-employee", authenticateToken, authorizeRoles(['Admin']), as
                 Name,
                 Email,
                 Role,
+                Department,
                 Rating: 0.0 // Include rating in the response
             },
             accessToken,
@@ -307,35 +310,255 @@ router.get("/all-employees", authenticateToken, authorizeRoles(["Admin"]), async
 
 router.delete("/delete-employee/:id", authenticateToken, authorizeRoles(["Admin"]), async (req, res) => {
     try {
-        const { id } = req.params;
-
-        if (!id) {
-            return res.status(400).json({ error: true, message: "Employee ID is required" });
+      const { id } = req.params;
+      const { transferToEmployeeId } = req.body; // Optional: ID of employee to transfer references to
+  
+      if (!id) {
+        return res.status(400).json({ error: true, message: "Employee ID is required" });
+      }
+  
+      // Begin a transaction to ensure all operations are atomic
+      db.beginTransaction(async (err) => {
+        if (err) {
+          console.error("Error starting transaction:", err);
+          return res.status(500).json({ error: true, message: "Database transaction error" });
         }
-
-        const deleteQuery = "DELETE FROM employees WHERE EmployeeID = ?";
-
-        db.query(deleteQuery, [id], (err, result) => {
-            if (err) {
-                console.error("Database query error:", err);
-                return res.status(500).json({ error: true, message: "Internal server error" });
-            }
-
-            if (result.affectedRows === 0) {
-                return res.status(404).json({ error: true, message: "Employee not found" });
-            }
-
-            return res.status(200).json({
-                success: true,
-                message: "Employee deleted successfully",
+  
+        try {
+          // First, check if employee exists
+          const employeeQuery = "SELECT * FROM employees WHERE EmployeeID = ?";
+          const employee = await new Promise((resolve, reject) => {
+            db.query(employeeQuery, [id], (err, result) => {
+              if (err) reject(err);
+              resolve(result[0]);
             });
-        });
-
+          });
+  
+          if (!employee) {
+            db.rollback();
+            return res.status(404).json({ error: true, message: "Employee not found" });
+          }
+  
+          // Check for references in PartOrders table
+          const partOrdersCheckQuery = "SELECT COUNT(*) as count FROM partorders WHERE RequestedBy = ? OR ApprovedBy = ? OR FulfilledBy = ?";
+          const partOrdersCount = await new Promise((resolve, reject) => {
+            db.query(partOrdersCheckQuery, [id, id, id], (err, result) => {
+              if (err) reject(err);
+              resolve(result[0].count);
+            });
+          });
+  
+          // Check for references in other tables as needed
+          // Example: Check Mechanics_Assigned
+          const mechanicsAssignedCheckQuery = "SELECT COUNT(*) as count FROM mechanics_assigned WHERE EmployeeID = ?";
+          const mechanicsAssignedCount = await new Promise((resolve, reject) => {
+            db.query(mechanicsAssignedCheckQuery, [id], (err, result) => {
+              if (err) reject(err);
+              resolve(result[0].count);
+            });
+          });
+  
+          // Check attendance and leave records
+          const attendanceCheckQuery = "SELECT COUNT(*) as count FROM attendances WHERE EmployeeID = ?";
+          const attendanceCount = await new Promise((resolve, reject) => {
+            db.query(attendanceCheckQuery, [id], (err, result) => {
+              if (err) reject(err);
+              resolve(result[0].count);
+            });
+          });
+  
+          const leaveCheckQuery = "SELECT COUNT(*) as count FROM leaverequests WHERE EmployeeID = ?";
+          const leaveCount = await new Promise((resolve, reject) => {
+            db.query(leaveCheckQuery, [id], (err, result) => {
+              if (err) reject(err);
+              resolve(result[0].count);
+            });
+          });
+  
+          // Check invoice, inventory logs, and fulfilled orders
+          const invoiceCheckQuery = "SELECT COUNT(*) as count FROM invoice WHERE GeneratedBy = ?";
+          const invoiceCount = await new Promise((resolve, reject) => {
+            db.query(invoiceCheckQuery, [id], (err, result) => {
+              if (err) reject(err);
+              resolve(result[0].count);
+            });
+          });
+  
+          const inventoryLogsCheckQuery = "SELECT COUNT(*) as count FROM partinventorylogs WHERE EmployeeID = ?";
+          const inventoryLogsCount = await new Promise((resolve, reject) => {
+            db.query(inventoryLogsCheckQuery, [id], (err, result) => {
+              if (err) reject(err);
+              resolve(result[0].count);
+            });
+          });
+  
+          const fulfilledOrdersCheckQuery = "SELECT COUNT(*) as count FROM fulfilledorderitems WHERE FulfilledBy = ?";
+          const fulfilledOrdersCount = await new Promise((resolve, reject) => {
+            db.query(fulfilledOrdersCheckQuery, [id], (err, result) => {
+              if (err) reject(err);
+              resolve(result[0].count);
+            });
+          });
+  
+          const reportsCheckQuery = "SELECT COUNT(*) as count FROM reports WHERE GeneratedBy = ?";
+          const reportsCount = await new Promise((resolve, reject) => {
+            db.query(reportsCheckQuery, [id], (err, result) => {
+              if (err) reject(err);
+              resolve(result[0].count);
+            });
+          });
+  
+          // Calculate total references
+          const totalReferences = partOrdersCount + mechanicsAssignedCount + attendanceCount + 
+                                leaveCount + invoiceCount + inventoryLogsCount + 
+                                fulfilledOrdersCount + reportsCount;
+  
+          // If there are references and no transfer ID was provided, return an error
+          if (totalReferences > 0 && !transferToEmployeeId) {
+            db.rollback();
+            return res.status(400).json({ 
+              error: true, 
+              message: "Cannot delete employee: This employee has references in other tables.",
+              references: {
+                partOrders: partOrdersCount,
+                mechanicsAssigned: mechanicsAssignedCount,
+                attendance: attendanceCount,
+                leaveRequests: leaveCount,
+                invoices: invoiceCount,
+                inventoryLogs: inventoryLogsCount,
+                fulfilledOrders: fulfilledOrdersCount,
+                reports: reportsCount,
+                total: totalReferences
+              }
+            });
+          }
+  
+          // If transfer ID is provided, transfer all references
+          if (transferToEmployeeId) {
+            // Check if transfer employee exists
+            const transferEmployeeQuery = "SELECT * FROM employees WHERE EmployeeID = ?";
+            const transferEmployee = await new Promise((resolve, reject) => {
+              db.query(transferEmployeeQuery, [transferToEmployeeId], (err, result) => {
+                if (err) reject(err);
+                resolve(result[0]);
+              });
+            });
+  
+            if (!transferEmployee) {
+              db.rollback();
+              return res.status(404).json({ error: true, message: "Transfer employee not found" });
+            }
+  
+            // Transfer references in PartOrders
+            const updatePartOrdersRequestedByQuery = "UPDATE partorders SET RequestedBy = ? WHERE RequestedBy = ?";
+            await new Promise((resolve, reject) => {
+              db.query(updatePartOrdersRequestedByQuery, [transferToEmployeeId, id], (err, result) => {
+                if (err) reject(err);
+                resolve(result);
+              });
+            });
+  
+            const updatePartOrdersApprovedByQuery = "UPDATE partorders SET ApprovedBy = ? WHERE ApprovedBy = ?";
+            await new Promise((resolve, reject) => {
+              db.query(updatePartOrdersApprovedByQuery, [transferToEmployeeId, id], (err, result) => {
+                if (err) reject(err);
+                resolve(result);
+              });
+            });
+  
+            const updatePartOrdersFulfilledByQuery = "UPDATE partorders SET FulfilledBy = ? WHERE FulfilledBy = ?";
+            await new Promise((resolve, reject) => {
+              db.query(updatePartOrdersFulfilledByQuery, [transferToEmployeeId, id], (err, result) => {
+                if (err) reject(err);
+                resolve(result);
+              });
+            });
+  
+            // Transfer references in Mechanics_Assigned
+            const updateMechanicsAssignedQuery = "UPDATE mechanics_assigned SET EmployeeID = ? WHERE EmployeeID = ?";
+            await new Promise((resolve, reject) => {
+              db.query(updateMechanicsAssignedQuery, [transferToEmployeeId, id], (err, result) => {
+                if (err) reject(err);
+                resolve(result);
+              });
+            });
+  
+            // Transfer references in Invoice
+            const updateInvoiceQuery = "UPDATE invoice SET GeneratedBy = ? WHERE GeneratedBy = ?";
+            await new Promise((resolve, reject) => {
+              db.query(updateInvoiceQuery, [transferToEmployeeId, id], (err, result) => {
+                if (err) reject(err);
+                resolve(result);
+              });
+            });
+  
+            // Transfer references in PartInventoryLogs
+            const updateInventoryLogsQuery = "UPDATE partinventorylogs SET EmployeeID = ? WHERE EmployeeID = ?";
+            await new Promise((resolve, reject) => {
+              db.query(updateInventoryLogsQuery, [transferToEmployeeId, id], (err, result) => {
+                if (err) reject(err);
+                resolve(result);
+              });
+            });
+  
+            // Transfer references in FulfilledOrderItems
+            const updateFulfilledOrdersQuery = "UPDATE fulfilledorderitems SET FulfilledBy = ? WHERE FulfilledBy = ?";
+            await new Promise((resolve, reject) => {
+              db.query(updateFulfilledOrdersQuery, [transferToEmployeeId, id], (err, result) => {
+                if (err) reject(err);
+                resolve(result);
+              });
+            });
+  
+            // Transfer references in Reports
+            const updateReportsQuery = "UPDATE reports SET GeneratedBy = ? WHERE GeneratedBy = ?";
+            await new Promise((resolve, reject) => {
+              db.query(updateReportsQuery, [transferToEmployeeId, id], (err, result) => {
+                if (err) reject(err);
+                resolve(result);
+              });
+            });
+  
+            // Note: For attendance and leave records, you might want to keep them associated with the original employee
+            // for historical purposes, or you could delete them along with the employee
+          }
+  
+          // Now delete the employee
+          const deleteQuery = "DELETE FROM employees WHERE EmployeeID = ?";
+          await new Promise((resolve, reject) => {
+            db.query(deleteQuery, [id], (err, result) => {
+              if (err) reject(err);
+              resolve(result);
+            });
+          });
+  
+          // Commit the transaction
+          db.commit((err) => {
+            if (err) {
+              console.error("Error committing transaction:", err);
+              db.rollback();
+              return res.status(500).json({ error: true, message: "Database transaction error" });
+            }
+  
+            return res.status(200).json({
+              success: true,
+              message: transferToEmployeeId 
+                ? `Employee deleted successfully. All references transferred to employee ${transferToEmployeeId}.`
+                : "Employee deleted successfully.",
+            });
+          });
+  
+        } catch (error) {
+          console.error("Error in delete-employee transaction:", error);
+          db.rollback();
+          return res.status(500).json({ error: true, message: "Internal server error" });
+        }
+      });
     } catch (error) {
-        console.error("Unexpected error in /delete-employee:", error);
-        return res.status(500).json({ error: true, message: "Something went wrong" });
+      console.error("Unexpected error in /delete-employee:", error);
+      return res.status(500).json({ error: true, message: "Something went wrong" });
     }
-});
+  });
 
 router.post("/mark-attendance", authenticateToken, async (req, res) => {
     try {

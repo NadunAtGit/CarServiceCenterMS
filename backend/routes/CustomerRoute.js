@@ -1050,7 +1050,7 @@ router.post("/breakdown/request", authenticateToken, authorizeRoles(['Customer']
   });
   
 
-  router.put("/breakdown/cancel/:requestId", authenticateToken, authorizeRoles(['Customer', 'Admin']), async (req, res) => {
+router.put("/breakdown/cancel/:requestId", authenticateToken, authorizeRoles(['Customer', 'Admin']), async (req, res) => {
     try {
       const { requestId } = req.params;
       const customerId = req.user.customerId;
@@ -1123,6 +1123,121 @@ router.post("/breakdown/request", authenticateToken, authorizeRoles(['Customer']
       });
     }
   });
+
+router.post("/update-mechanic-rating", authenticateToken, authorizeRoles(["Customer"]), async (req, res) => {
+    try {
+        const { jobCardId, mechanicId, rating } = req.body;
+        const customerId = req.user.customerId;
+
+        // Validate input
+        if (!jobCardId || !mechanicId || !rating || rating < 1 || rating > 5) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid input. Please provide jobCardId, mechanicId, and rating (1-5)"
+            });
+        }
+
+        // Verify the job card belongs to the customer
+        const verifyJobCardQuery = `
+            SELECT j.JobCardID 
+            FROM JobCards j
+            JOIN Appointments a ON j.AppointmentID = a.AppointmentID
+            WHERE j.JobCardID = ? AND a.CustomerID = ? AND j.Status = 'Finished'
+        `;
+
+        const jobCardResult = await new Promise((resolve, reject) => {
+            db.query(verifyJobCardQuery, [jobCardId, customerId], (err, result) => {
+                if (err) reject(err);
+                resolve(result);
+            });
+        });
+
+        if (jobCardResult.length === 0) {
+            return res.status(403).json({
+                success: false,
+                message: "You can only rate mechanics assigned to your completed job cards"
+            });
+        }
+
+        // Verify the mechanic was assigned to this job card
+        const verifyMechanicQuery = `
+            SELECT * FROM Mechanics_Assigned 
+            WHERE JobCardID = ? AND EmployeeID = ?
+        `;
+
+        const mechanicResult = await new Promise((resolve, reject) => {
+            db.query(verifyMechanicQuery, [jobCardId, mechanicId], (err, result) => {
+                if (err) reject(err);
+                resolve(result);
+            });
+        });
+
+        if (mechanicResult.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "This mechanic was not assigned to the specified job card"
+            });
+        }
+
+        // Get current rating for the mechanic
+        const getCurrentRatingQuery = `
+            SELECT Rating FROM Employees WHERE EmployeeID = ?
+        `;
+
+        const currentRatingResult = await new Promise((resolve, reject) => {
+            db.query(getCurrentRatingQuery, [mechanicId], (err, result) => {
+                if (err) reject(err);
+                resolve(result);
+            });
+        });
+
+        if (currentRatingResult.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Mechanic not found"
+            });
+        }
+
+        // Calculate new rating (simple average for now)
+        // In a production system, you might want to store individual ratings and calculate the average
+        const currentRating = currentRatingResult[0].Rating || 0;
+        const newRating = currentRating === 0 ? rating : (currentRating + rating) / 2;
+
+        // Update the mechanic's rating
+        const updateRatingQuery = `
+            UPDATE Employees 
+            SET Rating = ? 
+            WHERE EmployeeID = ?
+        `;
+
+        await new Promise((resolve, reject) => {
+            db.query(updateRatingQuery, [newRating, mechanicId], (err, result) => {
+                if (err) reject(err);
+                resolve(result);
+            });
+        });
+
+        // Create a notification for the mechanic
+        const notificationTitle = "New Rating Received";
+        const notificationBody = `You received a ${rating}/5 rating for job card ${jobCardId}`;
+
+        // Return success response
+        return res.status(200).json({
+            success: true,
+            message: "Mechanic rating updated successfully",
+            newRating: newRating
+        });
+
+    } catch (error) {
+        console.error("Error updating mechanic rating:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: error.message
+        });
+    }
+});
+
   
   
   

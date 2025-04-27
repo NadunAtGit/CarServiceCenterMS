@@ -650,12 +650,15 @@ router.put("/finish-job/:JobCardID", authenticateToken, authorizeRoles(["Mechani
                 
                 console.log(`Found AppointmentID: ${appointmentID}, fetching VehicleID`);
                 
-                // Step 5: Get VehicleID from Appointments table
-                const getVehicleQuery = `
-                    SELECT VehicleID, CustomerID FROM Appointments 
-                    WHERE AppointmentID = ?`;
+                // Step 5: Get VehicleID, CustomerID, and mechanic name from Appointments table
+                const getInfoQuery = `
+                    SELECT a.VehicleID, a.CustomerID, c.FirebaseToken, e.Name as mechanicName 
+                    FROM Appointments a
+                    JOIN Customers c ON a.CustomerID = c.CustomerID
+                    JOIN Employees e ON e.EmployeeID = ?
+                    WHERE a.AppointmentID = ?`;
                 
-                db.query(getVehicleQuery, [appointmentID], (err, appointmentResult) => {
+                db.query(getInfoQuery, [mechanicId, appointmentID], (err, infoResult) => {
                     if (err) {
                         console.error(`Error fetching appointment data: ${err.message}`);
                         return res.status(500).json({
@@ -665,7 +668,7 @@ router.put("/finish-job/:JobCardID", authenticateToken, authorizeRoles(["Mechani
                         });
                     }
                     
-                    if (appointmentResult.length === 0) {
+                    if (infoResult.length === 0) {
                         console.error(`No appointment found with ID ${appointmentID}`);
                         return res.status(404).json({
                             success: false,
@@ -673,8 +676,10 @@ router.put("/finish-job/:JobCardID", authenticateToken, authorizeRoles(["Mechani
                         });
                     }
                     
-                    const vehicleID = appointmentResult[0].VehicleID;
-                    const customerID = appointmentResult[0].CustomerID;
+                    const vehicleID = infoResult[0].VehicleID;
+                    const customerID = infoResult[0].CustomerID;
+                    const fcmToken = infoResult[0].FirebaseToken;
+                    const mechanicName = infoResult[0].mechanicName;
                     
                     console.log(`Found VehicleID: ${vehicleID} for CustomerID: ${customerID}`);
                     
@@ -757,87 +762,180 @@ router.put("/finish-job/:JobCardID", authenticateToken, authorizeRoles(["Mechani
                                     console.log(`Updated NextServiceMilleage for vehicle ${vehicleID} to ${nextMileage}`);
                                     console.log(`Affected rows: ${vehicleResult.affectedRows}`);
 
-                                    // If no mechanics are assigned, just commit the transaction
-                                    if (assignedMechanics.length === 0) {
-                                        db.commit(err => {
-                                            if (err) {
-                                                db.rollback(() => {
-                                                    console.error("Error committing transaction:", err);
-                                                    return res.status(500).json({ 
-                                                        success: false, 
-                                                        message: "Error committing transaction", 
-                                                        error: err 
-                                                    });
-                                                });
-                                                return;
-                                            }
-
-                                            console.log(`Transaction committed successfully, no mechanics to release`);
-                                            return res.status(200).json({ 
-                                                success: true, 
-                                                message: "Job card finished successfully. No mechanics were assigned.", 
-                                                jobCardId: JobCardID,
-                                                completedBy: mechanicId,
-                                                completedAt: new Date(),
-                                                currentMileage: serviceMilleage,
-                                                nextServiceMileage: nextMileage,
-                                                vehicleId: vehicleID
-                                            });
+                                    // Generate notification ID
+                                    generateNotificationId().then(notificationID => {
+                                        // Prepare notification data
+                                        const notificationTitle = 'Job Card Completed';
+                                        const notificationBody = `Mechanic ${mechanicName} has completed your job card #${JobCardID}`;
+                                        
+                                        // Prepare notification metadata
+                                        const metadata = JSON.stringify({
+                                            jobCardID: JobCardID,
+                                            completedBy: mechanicId,
+                                            mechanicName: mechanicName,
+                                            completedAt: new Date().toISOString(),
+                                            vehicleId: vehicleID
                                         });
-                                        return;
-                                    }
-
-                                    // Get array of mechanic IDs
-                                    const mechanicIds = assignedMechanics.map(mech => mech.EmployeeID);
-                                    console.log(`Releasing mechanics: ${mechanicIds.join(', ')}`);
-                                    
-                                    // Step 7.4: Update attendances table to set isWorking = 0 for all assigned mechanics
-                                    const updateAttendancesQuery = `
-                                        UPDATE attendances 
-                                        SET isWorking = 0
-                                        WHERE EmployeeID IN (?)`;
-                                    
-                                    db.query(updateAttendancesQuery, [mechanicIds], (err, attendancesResult) => {
-                                        if (err) {
-                                            db.rollback(() => {
-                                                console.error("Error updating attendances:", err);
-                                                return res.status(500).json({ 
-                                                    success: false, 
-                                                    message: "Error updating attendances", 
-                                                    error: err 
-                                                });
-                                            });
-                                            return;
-                                        }
-
-                                        console.log(`Updated attendance status for ${attendancesResult.affectedRows} mechanics`);
-
-                                        // Commit the transaction
-                                        db.commit(err => {
+                                        
+                                        // Insert notification into database
+                                        const insertNotificationQuery = `
+    INSERT INTO notifications 
+    (notification_id, CustomerID, title, message, notification_type, icon_type, color_code, is_read, created_at, navigate_id, metadata)
+    VALUES (?, ?, ?, ?, ?, ?, ?, FALSE, CURRENT_TIMESTAMP, ?, ?)`;
+                                        
+    db.query(insertNotificationQuery, [
+        notificationID,
+        customerID,
+        notificationTitle,
+        notificationBody,
+        'Job Card Completed',  // notification_type
+        'done_all',            // icon_type
+        '#4CAF50',             // color_code - Green
+        JobCardID,             // navigate_id
+        metadata               // metadata
+    ],  (err, notificationResult) => {
                                             if (err) {
-                                                db.rollback(() => {
-                                                    console.error("Error committing transaction:", err);
-                                                    return res.status(500).json({ 
-                                                        success: false, 
-                                                        message: "Error committing transaction", 
-                                                        error: err 
+                                                console.error("Error inserting notification:", err);
+                                                // Continue with the process even if notification insertion fails
+                                            }
+                                            
+                                            // Try to send FCM notification if token exists
+                                            let notificationSent = false;
+                                            
+                                            const processFCMAndUpdateAttendances = () => {
+                                                // If no mechanics are assigned, just commit the transaction
+                                                if (assignedMechanics.length === 0) {
+                                                    db.commit(err => {
+                                                        if (err) {
+                                                            db.rollback(() => {
+                                                                console.error("Error committing transaction:", err);
+                                                                return res.status(500).json({ 
+                                                                    success: false, 
+                                                                    message: "Error committing transaction", 
+                                                                    error: err 
+                                                                });
+                                                            });
+                                                            return;
+                                                        }
+
+                                                        console.log(`Transaction committed successfully, no mechanics to release`);
+                                                        return res.status(200).json({ 
+                                                            success: true, 
+                                                            message: "Job card finished successfully. No mechanics were assigned.", 
+                                                            jobCardId: JobCardID,
+                                                            completedBy: mechanicId,
+                                                            completedAt: new Date(),
+                                                            currentMileage: serviceMilleage,
+                                                            nextServiceMileage: nextMileage,
+                                                            vehicleId: vehicleID,
+                                                            notification: {
+                                                                sent: notificationSent,
+                                                                id: notificationID
+                                                            }
+                                                        });
+                                                    });
+                                                    return;
+                                                }
+
+                                                // Get array of mechanic IDs
+                                                const mechanicIds = assignedMechanics.map(mech => mech.EmployeeID);
+                                                console.log(`Releasing mechanics: ${mechanicIds.join(', ')}`);
+                                                
+                                                // Step 7.4: Update attendances table to set isWorking = 0 for all assigned mechanics
+                                                const updateAttendancesQuery = `
+                                                    UPDATE attendances 
+                                                    SET isWorking = 0
+                                                    WHERE EmployeeID IN (?)`;
+                                                
+                                                db.query(updateAttendancesQuery, [mechanicIds], (err, attendancesResult) => {
+                                                    if (err) {
+                                                        db.rollback(() => {
+                                                            console.error("Error updating attendances:", err);
+                                                            return res.status(500).json({ 
+                                                                success: false, 
+                                                                message: "Error updating attendances", 
+                                                                error: err 
+                                                            });
+                                                        });
+                                                        return;
+                                                    }
+
+                                                    console.log(`Updated attendance status for ${attendancesResult.affectedRows} mechanics`);
+
+                                                    // Commit the transaction
+                                                    db.commit(err => {
+                                                        if (err) {
+                                                            db.rollback(() => {
+                                                                console.error("Error committing transaction:", err);
+                                                                return res.status(500).json({ 
+                                                                    success: false, 
+                                                                    message: "Error committing transaction", 
+                                                                    error: err 
+                                                                });
+                                                            });
+                                                            return;
+                                                        }
+
+                                                        console.log(`Transaction committed successfully with mechanics released`);
+                                                        // Success response
+                                                        return res.status(200).json({ 
+                                                            success: true, 
+                                                            message: "Job card finished successfully and mechanics released", 
+                                                            jobCardId: JobCardID,
+                                                            completedBy: mechanicId,
+                                                            completedAt: new Date(),
+                                                            releasedMechanics: mechanicIds,
+                                                            currentMileage: serviceMilleage,
+                                                            nextServiceMileage: nextMileage,
+                                                            vehicleId: vehicleID,
+                                                            notification: {
+                                                                sent: notificationSent,
+                                                                id: notificationID
+                                                            }
+                                                        });
                                                     });
                                                 });
-                                                return;
-                                            }
+                                            };
+                                            
+                                            // Send FCM notification if token exists
+                                            if (fcmToken) {
+                                                const notificationMessage = {
+                                                    notification: {
+                                                        title: notificationTitle,
+                                                        body: notificationBody,
+                                                    },
+                                                    data: {
+                                                        jobCardID: JobCardID,
+                                                        type: 'job_card_completed',
+                                                        completedBy: mechanicId.toString(),
+                                                        vehicleId: vehicleID.toString()
+                                                    },
+                                                    token: fcmToken,
+                                                };
 
-                                            console.log(`Transaction committed successfully with mechanics released`);
-                                            // Success response
-                                            return res.status(200).json({ 
-                                                success: true, 
-                                                message: "Job card finished successfully and mechanics released", 
-                                                jobCardId: JobCardID,
-                                                completedBy: mechanicId,
-                                                completedAt: new Date(),
-                                                releasedMechanics: mechanicIds,
-                                                currentMileage: serviceMilleage,
-                                                nextServiceMileage: nextMileage,
-                                                vehicleId: vehicleID
+                                                messaging.send(notificationMessage)
+                                                    .then(() => {
+                                                        console.log("FCM notification sent successfully");
+                                                        notificationSent = true;
+                                                        processFCMAndUpdateAttendances();
+                                                    })
+                                                    .catch((error) => {
+                                                        console.error("Error sending FCM notification:", error);
+                                                        // Continue the process even if FCM fails
+                                                        processFCMAndUpdateAttendances();
+                                                    });
+                                            } else {
+                                                console.log("No FCM token available for customer, skipping push notification");
+                                                processFCMAndUpdateAttendances();
+                                            }
+                                        });
+                                    }).catch(err => {
+                                        db.rollback(() => {
+                                            console.error("Error generating notification ID:", err);
+                                            return res.status(500).json({ 
+                                                success: false, 
+                                                message: "Error generating notification ID", 
+                                                error: err 
                                             });
                                         });
                                     });

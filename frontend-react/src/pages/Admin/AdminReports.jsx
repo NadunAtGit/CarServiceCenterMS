@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { FiDownload, FiPrinter, FiFilter, FiCalendar } from 'react-icons/fi';
+import { FiDownload, FiPrinter, FiFilter, FiCalendar, FiEye } from 'react-icons/fi';
 import axiosInstance from '../../utils/AxiosInstance';
+import ReportModal from '../../components/Modals/ReportModal';
 
 const AdminReports = () => {
   const [reportType, setReportType] = useState('daily');
@@ -14,6 +15,8 @@ const AdminReports = () => {
   const [monthlySummary, setMonthlySummary] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [recentReports, setRecentReports] = useState([]);
+  const [selectedReport, setSelectedReport] = useState(null);
+  const [showModal, setShowModal] = useState(false);
 
   const departmentOptions = [
     { value: 'all', label: 'All Departments' },
@@ -45,15 +48,12 @@ const AdminReports = () => {
         // Fetch monthly summary
         const monthlyRes = await axiosInstance.get(`/api/reports/monthly?year=${currentYear}&month=${currentMonth}`);
         setMonthlySummary(monthlyRes.data.data);
-
-        // Mock recent reports data - in a real app, you would fetch this from an API
-        setRecentReports([
-          { id: 'REP-20250426-01', date: 'Apr 26, 2025', type: 'Daily', department: 'All', transactions: 342, revenue: '$8,745.25' },
-          { id: 'REP-20250425-01', date: 'Apr 25, 2025', type: 'Daily', department: 'Service', transactions: 198, revenue: '$5,120.50' },
-          { id: 'REP-20250424-01', date: 'Apr 24, 2025', type: 'Daily', department: 'Parts', transactions: 144, revenue: '$3,624.75' },
-          { id: 'REP-20250420-01', date: 'Apr 20-26, 2025', type: 'Weekly', department: 'All', transactions: 1842, revenue: '$42,567.80' },
-          { id: 'REP-20250401-01', date: 'Apr 1-30, 2025', type: 'Monthly', department: 'All', transactions: 7453, revenue: '$192,845.60' }
-        ]);
+  
+        // Fetch real reports from API
+        const reportsRes = await axiosInstance.get('/api/reports');
+        if (reportsRes.data.success) {
+          setRecentReports(reportsRes.data.reports);
+        }
       } catch (error) {
         console.error("Error fetching summary data:", error);
       } finally {
@@ -63,7 +63,12 @@ const AdminReports = () => {
     
     fetchSummaryData();
   }, []);
-
+  
+  const handleViewReport = (report) => {
+    setSelectedReport(report);
+    setShowModal(true);
+  };
+  
   const handleDownloadReport = async (reportType, customParams = {}) => {
     try {
       let endpoint = `/api/reports/${reportType}/download`;
@@ -280,21 +285,30 @@ const AdminReports = () => {
               {recentReports.map((report, index) => (
                 <tr key={index} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{report.id}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{report.date}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{report.startDate}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{report.type}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{report.department}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{report.transactions}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{report.revenue}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    <div className="flex space-x-2">
-                      <button 
-                        className="text-[#944EF8] hover:text-[#7b3be0]"
-                        onClick={() => handleDownloadReport(report.type.toLowerCase(), { reportId: report.id })}
-                      >
-                        <FiDownload size={16} />
-                      </button>
-                    </div>
+                      <div className="flex space-x-2">
+                        <button 
+                          className="text-[#944EF8] hover:text-[#7b3be0]"
+                          onClick={() => handleDownloadReport(report.type.toLowerCase(), { reportId: report.id })}
+                          title="Download"
+                        >
+                          <FiDownload size={16} />
+                        </button>
+                        <button 
+                          className="text-[#944EF8] hover:text-[#7b3be0]"
+                          onClick={() => handleViewReport(report)}
+                          title="View Details"
+                        >
+                          <FiEye size={16} />
+                        </button>
+                      </div>
                   </td>
+
                 </tr>
               ))}
             </tbody>
@@ -388,7 +402,18 @@ const AdminReports = () => {
           </button>
         </div>
       </div>
+
+      {/* Report Modal */}
+          {showModal && selectedReport && (
+            <ReportModal 
+              report={selectedReport} 
+              onClose={() => setShowModal(false)} 
+            />
+          )}
+
     </div>
+
+    
   );
 };
 

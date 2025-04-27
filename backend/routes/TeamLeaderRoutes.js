@@ -49,20 +49,25 @@ router.get("/present-employees", authenticateToken, authorizeRoles(["Team Leader
 router.get("/notworking-employees", authenticateToken, authorizeRoles(["Team Leader"]), async (req, res) => {
     try {
         const todayDate = moment().format("YYYY-MM-DD"); // Get today's date
-
+        
+        // Get the Team Leader's department from the JWT token
+        const employeeDepartment = req.user.department;
+        
         const query = `
-            SELECT Employees.EmployeeID, Employees.Name, Employees.Email, Employees.Role,Employees.ProfilePicUrl, 
+            SELECT Employees.EmployeeID, Employees.Name, Employees.Email, Employees.Role, 
+                   Employees.ProfilePicUrl, Employees.Department,
                    Attendances.Date, Attendances.Status, Attendances.ArrivalTime, Attendances.isWorking
             FROM Attendances
             JOIN Employees ON Attendances.EmployeeID = Employees.EmployeeID
             WHERE Attendances.Date = ? 
               AND Attendances.Status = 'Present' 
               AND Employees.Role = 'Mechanic'
-              AND Attendances.isWorking = FALSE;
+              AND Attendances.isWorking = FALSE
+              AND Employees.Department = ?
         `;
 
         const notWorkingMechanics = await new Promise((resolve, reject) => {
-            db.query(query, [todayDate], (err, result) => {
+            db.query(query, [todayDate, employeeDepartment], (err, result) => {
                 if (err) return reject(err);
                 resolve(result);
             });
@@ -70,7 +75,7 @@ router.get("/notworking-employees", authenticateToken, authorizeRoles(["Team Lea
 
         return res.status(200).json({
             error: false,
-            message: "Not working mechanics fetched successfully",
+            message: `Not working mechanics in ${employeeDepartment} department fetched successfully`,
             employees: notWorkingMechanics
         });
 
@@ -80,21 +85,38 @@ router.get("/notworking-employees", authenticateToken, authorizeRoles(["Team Lea
     }
 });
 
-
-
-
-router.get("/get-job-cards", authenticateToken, authorizeRoles(["Team Leader","Service Advisor"]), async (req, res) => {
+router.get("/get-job-cards", authenticateToken, authorizeRoles(["Team Leader", "Service Advisor"]), async (req, res) => {
     try {
-        const query = "SELECT * FROM JobCards WHERE Status = 'Created'";
+        // Get the employee's department and role from the JWT token
+        const employeeDepartment = req.user.department;
+        const employeeRole = req.user.role;
+        
+        // Build the query based on role
+        let query;
+        let queryParams = [];
+        
+        if (employeeRole === "Team Leader") {
+            // Team Leaders can only see job cards for their department
+            query = "SELECT * FROM JobCards WHERE Status = 'Created' AND Type = ?";
+            queryParams = [employeeDepartment];
+        } else {
+            // Service Advisors can see all job cards
+            query = "SELECT * FROM JobCards WHERE Status = 'Created'";
+        }
 
-        db.query(query, (err, result) => {
+        db.query(query, queryParams, (err, result) => {
             if (err) {
                 console.error("Error fetching job cards:", err);
                 return res.status(500).json({ error: true, message: "Internal server error" });
             }
 
             if (result.length === 0) {
-                return res.status(404).json({ error: true, message: "No job cards found with 'Created' status" });
+                return res.status(404).json({ 
+                    error: true, 
+                    message: employeeRole === "Team Leader" 
+                        ? `No job cards found with 'Created' status for ${employeeDepartment} department` 
+                        : "No job cards found with 'Created' status" 
+                });
             }
 
             return res.status(200).json({
@@ -107,6 +129,7 @@ router.get("/get-job-cards", authenticateToken, authorizeRoles(["Team Leader","S
         return res.status(500).json({ error: true, message: "Server error" });
     }
 });
+
 
 router.get('/get-job-cards/today',authenticateToken,authorizeRoles(["Team Leader","Service Advisor"]), async (req, res) => {
     try {
@@ -146,6 +169,7 @@ router.get('/get-job-cards/today',authenticateToken,authorizeRoles(["Team Leader
         });
     }
 });
+
 
 
 //     try {

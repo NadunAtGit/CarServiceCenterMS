@@ -376,72 +376,102 @@ router.get("/monthly", authenticateToken, authorizeRoles(["Admin"]), (req, res) 
 });
 
 router.get("/:type/download", authenticateToken, authorizeRoles(["Admin"]), async (req, res) => {
-    const { type } = req.params;
-    const { startDate, endDate, department } = req.query;
+  const { type } = req.params;
+  const { startDate, endDate, department } = req.query;
+  const employeeId = req.user.EmployeeID; // Get the employee ID from the authenticated user
+  
+  try {
+    // Get report data based on type
+    let reportData;
+    let reportStartDate;
+    let reportEndDate;
     
-    try {
-      // Get report data based on type
-      let reportData;
-      
-      if (type === 'daily') {
-        const date = req.query.date || new Date().toISOString().split('T')[0];
-        const dailyReport = await getDailyReport(date);
-        reportData = dailyReport;
-      } else if (type === 'weekly') {
-        const weekStart = req.query.startDate;
-        const weeklyReport = await getWeeklyReport(weekStart);
-        reportData = weeklyReport;
-      } else if (type === 'monthly') {
-        const year = req.query.year || new Date().getFullYear();
-        const month = req.query.month || new Date().getMonth() + 1;
-        const monthlyReport = await getMonthlyReport(year, month);
-        reportData = monthlyReport;
-      } else if (type === 'custom') {
-        if (!startDate || !endDate) {
-          return res.status(400).json({ success: false, message: "Start and end dates are required for custom reports" });
-        }
-        const customReport = await getCustomReport(startDate, endDate, department);
-        reportData = customReport;
-      } else {
-        return res.status(400).json({ success: false, message: "Invalid report type" });
+    if (type === 'daily') {
+      const date = req.query.date || new Date().toISOString().split('T')[0];
+      reportStartDate = date;
+      reportData = await getDailyReport(date);
+    } else if (type === 'weekly') {
+      reportStartDate = req.query.startDate;
+      if (!reportStartDate) {
+        // Calculate default start date (Monday of current week)
+        const today = new Date();
+        const day = today.getDay();
+        const diff = today.getDate() - day + (day === 0 ? -6 : 1);
+        reportStartDate = new Date(today.setDate(diff)).toISOString().split('T')[0];
       }
       
-      // Create a temporary file path
-      const tempPath = path.join(__dirname, '..', 'temp', `${type}_report_${Date.now()}.pdf`);
-      await fs.ensureDir(path.dirname(tempPath));
+      // Calculate end date (start date + 6 days)
+      const endDateObj = new Date(reportStartDate);
+      endDateObj.setDate(endDateObj.getDate() + 6);
+      reportEndDate = endDateObj.toISOString().split('T')[0];
       
-      // Generate PDF
-      const doc = new PDFDocument({ margin: 50 });
-      const stream = fs.createWriteStream(tempPath);
+      reportData = await getWeeklyReport(reportStartDate);
+    } else if (type === 'monthly') {
+      const year = req.query.year || new Date().getFullYear();
+      const month = req.query.month || new Date().getMonth() + 1;
       
-      doc.pipe(stream);
+      // Calculate start and end dates for the month
+      reportStartDate = `${year}-${month.toString().padStart(2, '0')}-01`;
+      const endDateObj = new Date(year, month, 0); // Last day of month
+      reportEndDate = endDateObj.toISOString().split('T')[0];
       
-      // Add content to PDF
-      generatePdfContent(doc, reportData, type);
-      
-      doc.end();
-      
-      // When the stream is finished, send the file
-      stream.on('finish', () => {
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename=${type}_report.pdf`);
-        
-        const fileStream = fs.createReadStream(tempPath);
-        fileStream.pipe(res);
-        
-        // Delete the temp file after sending
-        fileStream.on('end', () => {
-          fs.unlink(tempPath).catch(err => console.error('Error deleting temp file:', err));
-        });
-      });
-      
-    } catch (error) {
-      console.error(`Error generating ${type} report PDF:`, error);
-      res.status(500).json({ success: false, message: "Failed to generate PDF report" });
+      reportData = await getMonthlyReport(year, month);
+    } else if (type === 'custom') {
+      if (!startDate || !endDate) {
+        return res.status(400).json({ success: false, message: "Start and end dates are required for custom reports" });
+      }
+      reportStartDate = startDate;
+      reportEndDate = endDate;
+      reportData = await getCustomReport(startDate, endDate, department);
+    } else {
+      return res.status(400).json({ success: false, message: "Invalid report type" });
     }
-  });
-  
-  6
+    
+    // Save report to database
+    const reportId = await saveReportToDatabase(
+      reportData, 
+      type, 
+      reportStartDate, 
+      reportEndDate, 
+      employeeId,
+      department || 'All'
+    );
+    
+    // Continue with PDF generation and download
+    const tempPath = path.join(__dirname, '..', 'temp', `${type}_report_${Date.now()}.pdf`);
+    await fs.ensureDir(path.dirname(tempPath));
+    
+    // Generate PDF
+    const doc = new PDFDocument({ margin: 50 });
+    const stream = fs.createWriteStream(tempPath);
+    
+    doc.pipe(stream);
+    
+    // Add content to PDF
+    generatePdfContent(doc, reportData, type);
+    
+    doc.end();
+    
+    // When the stream is finished, send the file
+    stream.on('finish', () => {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename=${type}_report_${reportId}.pdf`);
+      
+      const fileStream = fs.createReadStream(tempPath);
+      fileStream.pipe(res);
+      
+      // Delete the temp file after sending
+      fileStream.on('end', () => {
+        fs.unlink(tempPath).catch(err => console.error('Error deleting temp file:', err));
+      });
+    });
+    
+  } catch (error) {
+    console.error(`Error generating ${type} report PDF:`, error);
+    res.status(500).json({ success: false, message: "Failed to generate PDF report" });
+  }
+});
+
   // Helper function to generate PDF content
 //   function generatePdfContent(doc, data, reportType) {
 //     // Add logo and header
@@ -768,6 +798,182 @@ router.get("/:type/download", authenticateToken, authorizeRoles(["Admin"]), asyn
       });
     });
   }
+
+  async function saveReportToDatabase(reportData, type, startDate, endDate, employeeId, department = 'All') {
+    return new Promise((resolve, reject) => {
+      try {
+        // Generate a unique report ID
+        const date = new Date();
+        const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
+        
+        // Get the count of reports generated today
+        const countQuery = `
+          SELECT COUNT(*) as count 
+          FROM Reports 
+          WHERE DATE(GeneratedDate) = CURDATE()
+        `;
+        
+        db.query(countQuery, [], (err, countResult) => {
+          if (err) {
+            console.error("Error counting reports:", err);
+            reject(err);
+            return;
+          }
+          
+          const count = countResult[0].count + 1;
+          const reportId = `REP-${dateStr}-${count.toString().padStart(2, '0')}`;
+          
+          // Determine end date if not provided (for daily reports)
+          let reportEndDate = endDate;
+          if (!reportEndDate && type === 'daily') {
+            reportEndDate = startDate; // For daily reports, end date is same as start date
+          }
+          
+          // Insert the report
+          const insertQuery = `
+            INSERT INTO Reports (
+              ReportID, ReportType, StartDate, EndDate, Department,
+              Transactions, Revenue, ServicesCompleted, PartsSold,
+              ServiceRevenue, PartsRevenue, GeneratedBy, ReportData
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `;
+          
+          const params = [
+            reportId,
+            type.charAt(0).toUpperCase() + type.slice(1), // Capitalize first letter
+            startDate,
+            reportEndDate,
+            department,
+            reportData.transactions || 0,
+            reportData.revenue || 0,
+            reportData.services || 0,
+            reportData.parts || 0,
+            reportData.serviceRevenue || 0,
+            reportData.partsRevenue || 0,
+            employeeId,
+            JSON.stringify(reportData)
+          ];
+          
+          db.query(insertQuery, params, (err, result) => {
+            if (err) {
+              console.error("Error saving report:", err);
+              reject(err);
+              return;
+            }
+            
+            resolve(reportId);
+          });
+        });
+      } catch (error) {
+        console.error("Error in saveReportToDatabase:", error);
+        reject(error);
+      }
+    });
+  }
+
+  router.get("/", authenticateToken, authorizeRoles(["Admin"]), async (req, res) => {
+    try {
+      // Optional query parameters for filtering
+      const { reportType, startDate, endDate, department } = req.query;
+      
+      // Build the query with optional filters
+      let query = "SELECT * FROM Reports";
+      const queryParams = [];
+      
+      // Add WHERE clause if filters are provided
+      const conditions = [];
+      
+      if (reportType) {
+        conditions.push("ReportType = ?");
+        queryParams.push(reportType);
+      }
+      
+      if (startDate) {
+        conditions.push("StartDate >= ?");
+        queryParams.push(startDate);
+      }
+      
+      if (endDate) {
+        conditions.push("EndDate <= ?");
+        queryParams.push(endDate);
+      }
+      
+      if (department && department !== 'All') {
+        conditions.push("Department = ?");
+        queryParams.push(department);
+      }
+      
+      if (conditions.length > 0) {
+        query += " WHERE " + conditions.join(" AND ");
+      }
+      
+      // Add ordering
+      query += " ORDER BY GeneratedDate DESC";
+      
+      // Execute the query
+      db.query(query, queryParams, (err, results) => {
+        if (err) {
+          console.error("Error fetching reports:", err);
+          return res.status(500).json({ 
+            success: false, 
+            message: "Database error", 
+            error: err.message 
+          });
+        }
+        
+        // Process the results to format the report data
+        const reports = results.map(report => {
+          // Parse the JSON data if it exists
+          let reportData = null;
+if (report.ReportData) {
+  try {
+    // Check if it's already an object
+    if (typeof report.ReportData === 'object') {
+      reportData = report.ReportData;
+    } else {
+      // Only parse if it's a string
+      reportData = JSON.parse(report.ReportData);
+    }
+  } catch (e) {
+    console.error(`Error parsing report data for ${report.ReportID}:`, e);
+  }
+}
+
+          return {
+            id: report.ReportID,
+            type: report.ReportType,
+            startDate: report.StartDate,
+            endDate: report.EndDate,
+            department: report.Department,
+            transactions: report.Transactions,
+            revenue: report.Revenue,
+            services: report.ServicesCompleted,
+            parts: report.PartsSold,
+            serviceRevenue: report.ServiceRevenue,
+            partsRevenue: report.PartsRevenue,
+            generatedBy: report.GeneratedBy,
+            generatedDate: report.GeneratedDate,
+            data: reportData // Include the detailed data if needed
+          };
+        });
+        
+        res.status(200).json({
+          success: true,
+          count: reports.length,
+          reports: reports
+        });
+      });
+    } catch (error) {
+      console.error("Error in fetch reports API:", error);
+      res.status(500).json({ 
+        success: false, 
+        message: "Server error", 
+        error: error.message 
+      });
+    }
+  });
+  
+  
   
 
 
