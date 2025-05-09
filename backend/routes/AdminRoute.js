@@ -999,6 +999,273 @@ router.get("/get-employee/:id", authenticateToken, authorizeRoles(["Admin"]), as
     }
 });
 
+// API to get customer details by ID
+router.get('/getcustomer/:id', authenticateToken, authorizeRoles(["Admin", "Cashier"]), (req, res) => {
+  const customerId = req.params.id;
+  
+  const query = `SELECT CustomerID, FirstName, SecondName, Telephone, Email, Username 
+                FROM Customers WHERE CustomerID = ?`;
+
+  db.query(query, [customerId], (err, results) => {
+      if (err) {
+          console.error("Error fetching customer:", err);
+          return res.status(500).json({ message: "Error fetching customer", error: err });
+      }
+
+      if (results.length === 0) {
+          return res.status(404).json({ message: "Customer not found" });
+      }
+
+      res.status(200).json({ message: "Customer fetched successfully", customer: results[0] });
+  });
+});
+
+// API to get vehicles owned by a customer
+router.get('/getcustomer/:id/vehicles', authenticateToken, authorizeRoles(["Admin", "Cashier"]), (req, res) => {
+  const customerId = req.params.id;
+  
+  const query = `SELECT v.VehicleNo, v.Model, v.Type, v.VehiclePicUrl, v.CurrentMilleage, v.NextServiceMilleage 
+                FROM Vehicles v 
+                WHERE v.CustomerID = ?`;
+
+  db.query(query, [customerId], (err, results) => {
+      if (err) {
+          console.error("Error fetching customer vehicles:", err);
+          return res.status(500).json({ message: "Error fetching customer vehicles", error: err });
+      }
+
+      if (results.length === 0) {
+          return res.status(404).json({ message: "No vehicles found for this customer" });
+      }
+
+      res.status(200).json({ message: "Vehicles fetched successfully", vehicles: results });
+  });
+});
+
+
+// Apply for leave
+router.post("/apply-leave", authenticateToken, async (req, res) => {
+  try {
+    const { leaveDate, leaveType, reason } = req.body;
+    const employeeId = req.user.employeeId;
+    
+    if (!leaveDate || !leaveType || !reason) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required fields: leaveDate, leaveType, and reason are required"
+      });
+    }
+    
+    // Validate leave type
+    if (!['Full Day', 'Half Day'].includes(leaveType)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid leave type. Must be 'Full Day' or 'Half Day'"
+      });
+    }
+    
+    // Check if leave already exists for this date
+    const checkQuery = "SELECT * FROM LeaveRequests WHERE EmployeeID = ? AND LeaveDate = ?";
+    
+    db.query(checkQuery, [employeeId, leaveDate], (checkErr, checkResults) => {
+      if (checkErr) {
+        console.error("Error checking existing leave:", checkErr);
+        return res.status(500).json({
+          success: false,
+          message: "Database error while checking existing leave"
+        });
+      }
+      
+      if (checkResults.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: "You already have a leave request for this date"
+        });
+      }
+      
+      // Insert new leave request
+      const insertQuery = `
+        INSERT INTO LeaveRequests (EmployeeID, LeaveDate, LeaveType, Reason)
+        VALUES (?, ?, ?, ?)
+      `;
+      
+      db.query(insertQuery, [employeeId, leaveDate, leaveType, reason], (insertErr, insertResults) => {
+        if (insertErr) {
+          console.error("Error applying for leave:", insertErr);
+          return res.status(500).json({
+            success: false,
+            message: "Database error while applying for leave"
+          });
+        }
+        
+        return res.status(201).json({
+          success: true,
+          message: "Leave application submitted successfully",
+          leaveId: insertResults.insertId
+        });
+      });
+    });
+  } catch (error) {
+    console.error("Error in apply-leave endpoint:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error"
+    });
+  }
+});
+
+// Approve leave request
+router.put("/approve-leave", authenticateToken, authorizeRoles(["Admin"]), async (req, res) => {
+  try {
+    const { leaveId } = req.body;
+    
+    if (!leaveId) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required field: leaveId"
+      });
+    }
+    
+    // Check if leave request exists
+    const checkQuery = "SELECT * FROM LeaveRequests WHERE LeaveID = ?";
+    
+    db.query(checkQuery, [leaveId], (checkErr, checkResults) => {
+      if (checkErr) {
+        console.error("Error checking leave request:", checkErr);
+        return res.status(500).json({
+          success: false,
+          message: "Database error while checking leave request"
+        });
+      }
+      
+      if (checkResults.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Leave request not found"
+        });
+      }
+      
+      const leaveRequest = checkResults[0];
+      
+      if (leaveRequest.Status === 'Approved') {
+        return res.status(400).json({
+          success: false,
+          message: "Leave request is already approved"
+        });
+      }
+      
+      // Update leave request status
+      const updateQuery = "UPDATE LeaveRequests SET Status = 'Approved' WHERE LeaveID = ?";
+      
+      db.query(updateQuery, [leaveId], (updateErr, updateResults) => {
+        if (updateErr) {
+          console.error("Error approving leave:", updateErr);
+          return res.status(500).json({
+            success: false,
+            message: "Database error while approving leave"
+          });
+        }
+        
+        // Create attendance record for the approved leave
+        const insertAttendanceQuery = `
+          INSERT INTO Attendances (EmployeeID, Date, Status)
+          VALUES (?, ?, 'On Leave')
+        `;
+        
+        db.query(insertAttendanceQuery, [leaveRequest.EmployeeID, leaveRequest.LeaveDate], (attendanceErr) => {
+          if (attendanceErr) {
+            console.error("Error creating attendance record:", attendanceErr);
+            // Continue with success response even if attendance record creation fails
+          }
+          
+          return res.status(200).json({
+            success: true,
+            message: "Leave request approved successfully"
+          });
+        });
+      });
+    });
+  } catch (error) {
+    console.error("Error in approve-leave endpoint:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error"
+    });
+  }
+});
+
+// Reject leave request
+router.put("/reject-leave", authenticateToken, authorizeRoles(["Admin"]), async (req, res) => {
+  try {
+    const { leaveId, rejectionReason } = req.body;
+    
+    if (!leaveId) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required field: leaveId"
+      });
+    }
+    
+    // Check if leave request exists
+    const checkQuery = "SELECT * FROM LeaveRequests WHERE LeaveID = ?";
+    
+    db.query(checkQuery, [leaveId], (checkErr, checkResults) => {
+      if (checkErr) {
+        console.error("Error checking leave request:", checkErr);
+        return res.status(500).json({
+          success: false,
+          message: "Database error while checking leave request"
+        });
+      }
+      
+      if (checkResults.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Leave request not found"
+        });
+      }
+      
+      const leaveRequest = checkResults[0];
+      
+      if (leaveRequest.Status !== 'Not Approved') {
+        return res.status(400).json({
+          success: false,
+          message: "Cannot reject a leave request that has already been processed"
+        });
+      }
+      
+      // Update leave request status
+      const updateQuery = `
+        UPDATE LeaveRequests 
+        SET Status = 'Rejected', 
+            Reason = CONCAT(Reason, '\nRejection reason: ', ?)
+        WHERE LeaveID = ?
+      `;
+      
+      db.query(updateQuery, [rejectionReason || 'No reason provided', leaveId], (updateErr, updateResults) => {
+        if (updateErr) {
+          console.error("Error rejecting leave:", updateErr);
+          return res.status(500).json({
+            success: false,
+            message: "Database error while rejecting leave"
+          });
+        }
+        
+        return res.status(200).json({
+          success: true,
+          message: "Leave request rejected successfully"
+        });
+      });
+    });
+  } catch (error) {
+    console.error("Error in reject-leave endpoint:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error"
+    });
+  }
+});
+
 
 
 

@@ -28,7 +28,7 @@ const ServiceAdvisorJobCards = () => {
   const getJobCards = async () => {
     setIsLoading(true);
     try {
-      const response = await axiosInstance.get("api/teamleader/get-job-cards");
+      const response = await axiosInstance.get("api/advisor/jobcards");
       if (response.data.success) {
         setAllJobcards(response.data.jobCards);
       } else {

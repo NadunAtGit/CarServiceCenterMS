@@ -119,6 +119,8 @@ function generatePdfContent(doc, data, reportType) {
   }
 }
 
+
+
 module.exports = {
   authenticateToken,
   authorizeRoles,

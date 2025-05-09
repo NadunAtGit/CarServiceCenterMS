@@ -372,6 +372,7 @@ const generateInvoiceID = () => {
 
 
 
+
 module.exports = {
     generateCustomerId,
     generateAppointmentId,

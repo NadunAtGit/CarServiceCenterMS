@@ -1238,6 +1238,201 @@ router.post("/update-mechanic-rating", authenticateToken, authorizeRoles(["Custo
     }
 });
 
+router.post("/initiate-payhere-payment/:InvoiceID", authenticateToken, authorizeRoles(['Customer']), async (req, res) => {
+    try {
+      const { InvoiceID } = req.params;
+      const customerId = req.user.customerId;
+      
+      // Fetch invoice details with proper joins
+      const invoiceQuery = `
+  SELECT i.*, c.FirstName, c.SecondName, c.Email, c.Telephone
+  FROM Invoice i
+  JOIN JobCards j ON i.JobCard_ID = j.JobCardID
+  JOIN Appointments a ON j.AppointmentID = a.AppointmentID
+  JOIN Customers c ON a.CustomerID = c.CustomerID
+  WHERE i.Invoice_ID = ? AND c.CustomerID = ?
+`;
+      
+      db.query(invoiceQuery, [InvoiceID, customerId], (err, results) => {
+        if (err) {
+          console.error("Database error:", err);
+          return res.status(500).json({
+            success: false,
+            message: "Failed to fetch invoice details",
+            error: err.message
+          });
+        }
+        
+        if (results.length === 0) {
+          return res.status(404).json({
+            success: false,
+            message: "Invoice not found or does not belong to this customer"
+          });
+        }
+        
+        const invoice = results[0];
+        
+        // Get merchant details from environment variables
+        const merchantSecret = process.env.PAYHERE_MERCHANT_SECRET;
+        const merchantId = process.env.PAYHERE_MERCHANT_ID;
+        
+        // Create return URLs that are optimized for webview detection
+        // Using URL scheme that can be intercepted in the WebView
+        const returnUrl = "app://payment/success";
+        const cancelUrl = "app://payment/cancel";
+        
+        const hashedData = generatePayHereHash(merchantId, InvoiceID, invoice.Total, 'LKR', merchantSecret);
+        
+        // Return payment initialization data with default values for missing fields
+        return res.status(200).json({
+          success: true,
+          paymentData: {
+            merchant_id: merchantId,
+            return_url: returnUrl,
+            cancel_url: cancelUrl,
+            notify_url: `${process.env.BACKEND_URL}/api/customers/payhere-notify`,
+            order_id: InvoiceID,
+            items: `Invoice Payment - ${InvoiceID}`,
+            currency: 'LKR',
+            amount: invoice.Total,
+            first_name: invoice.FirstName,
+            last_name: invoice.SecondName,
+            email: invoice.Email,
+            phone: invoice.Telephone,
+            address: "N/A", // Default value
+            city: "Colombo", // Default value
+            country: "Sri Lanka", // Default value
+            hash: hashedData
+          }
+        });
+      });
+      
+    } catch (error) {
+      console.error("Error initiating PayHere payment:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to initiate payment",
+        error: error.message
+      });
+    }
+});
+  
+  // Helper function to generate PayHere hash
+  function generatePayHereHash(merchantId, orderId, amount, currency, merchantSecret) {
+    const crypto = require('crypto');
+    // Ensure proper string formatting and no extra spaces
+    const dataString = `${merchantId}${orderId}${amount}${currency}${merchantSecret}`;
+    return crypto.createHash('md5').update(dataString).digest('hex').toUpperCase();
+  }
+  
+
+  
+  router.post("/payhere-notify", async (req, res) => {
+    try {
+      // Extract payment details from the request body
+      const {
+        merchant_id,
+        order_id,
+        payment_id,
+        payhere_amount,
+        payhere_currency,
+        status_code,
+        md5sig
+      } = req.body;
+  
+      console.log("PayHere Notification Received:", req.body);
+      
+      // Verify the MD5 signature
+      const merchantSecret = "MTUwMTI0MDQ5OTEwNTg3NDIyMzMDIyNzUzMD"; // Your merchant secret
+      const expectedSig = generatePayHereHash(merchant_id, order_id, payhere_amount, payhere_currency, merchantSecret);
+      
+      if (md5sig !== expectedSig) {
+        console.error("Invalid MD5 signature");
+        return res.status(400).json({ error: "Invalid signature" });
+      }
+      
+      // Check payment status
+      if (status_code === "2") { // 2 means payment success
+        // Update invoice status
+        const updateQuery = `
+          UPDATE Invoice 
+          SET PaymentMethod = 'PayHere',
+              PaymentDate = CURRENT_TIMESTAMP,
+              PaymentReference = ?
+          WHERE Invoice_ID = ?
+        `;
+        
+        db.query(updateQuery, [payment_id, order_id], (err, result) => {
+          if (err) {
+            console.error("Database error:", err);
+            return res.status(500).json({ error: "Database error" });
+          }
+          
+          if (result.affectedRows === 0) {
+            console.error("Invoice not found:", order_id);
+            return res.status(404).json({ error: "Invoice not found" });
+          }
+          
+          // Return success response
+          return res.status(200).json({ status: "Success" });
+        });
+      } else {
+        console.log("Payment not successful. Status code:", status_code);
+        return res.status(200).json({ status: "Noted" });
+      }
+      
+    } catch (error) {
+      console.error("Error processing PayHere notification:", error);
+      return res.status(500).json({ error: "Server error" });
+    }
+  });
+
+  router.get("/paid-invoices", authenticateToken, async (req, res) => {
+    try {
+      const customerId = req.user.customerId; // Assuming the customer ID is stored in the token
+      
+      // Simplified query to get just pending invoices info
+      const query = `
+        SELECT i.Invoice_ID, i.Total, i.Parts_Cost, i.Labour_Cost, i.GeneratedDate, 
+               i.PaidStatus, j.JobCardID, a.AppointmentID, v.VehicleNo, v.Model
+        FROM Invoice i
+        INNER JOIN JobCards j ON i.JobCard_ID = j.JobCardID
+        INNER JOIN Appointments a ON j.AppointmentID = a.AppointmentID
+        INNER JOIN Vehicles v ON a.VehicleID = v.VehicleNo
+        WHERE a.CustomerID = ? AND i.PaidStatus = 'Paid'
+        ORDER BY i.GeneratedDate DESC
+      `;
+      
+      db.query(query, [customerId], (err, results) => {
+        if (err) {
+          console.error("Database error:", err);
+          return res.status(500).json({
+            success: false,
+            message: "Failed to fetch pending invoices",
+            error: err.message
+          });
+        }
+        
+        return res.status(200).json({
+          success: true,
+          message: results.length > 0 ? "Pending invoices retrieved successfully" : "No pending invoices found",
+          count: results.length,
+          data: results
+        });
+      });
+      
+    } catch (error) {
+      console.error("Error fetching pending invoices:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to fetch pending invoices",
+        error: error.message
+      });
+    }
+  });
+  
+  
+
   
   
   

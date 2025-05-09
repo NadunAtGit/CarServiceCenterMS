@@ -4,16 +4,17 @@ import { AiOutlineInfoCircle, AiOutlineDelete } from "react-icons/ai";
 import axiosInstance from '../../utils/AxiosInstance';
 import Modal from "react-modal";
 import AddEmployee from '../../components/Modals/AddEmployee';
-import EmployeeDataModal from '../../components/Modals/EmployeeDataModal'; // Make sure the path is correct
+import EmployeeDataModal from '../../components/Modals/EmployeeDataModal';
 
 // Initialize Modal
-Modal.setAppElement('#root'); // Make sure to set this to your app's root element
+Modal.setAppElement('#root');
 
 const AdminEmployees = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [allEmployees, setAllEmployees] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRole, setSelectedRole] = useState("");
+  const [searchTimeout, setSearchTimeout] = useState(null);
 
   // State for managing employee detail modal
   const [employeeDetailModal, setEmployeeDetailModal] = useState({
@@ -82,23 +83,28 @@ const AdminEmployees = () => {
     }
   };
 
-  const searchEmployees = async () => {
-    if (!searchQuery.trim()) {
-      alert("Please enter a search term");
+  const searchEmployees = async (query) => {
+    if (!query.trim()) {
+      // If search query is empty, show all employees based on selected role
+      if (selectedRole) {
+        filterEmployeesByRole(selectedRole);
+      } else {
+        getEmployeeData();
+      }
       return;
     }
 
     setIsLoading(true);
     try {
-      let endpoint = `api/admin/search-employee?query=${searchQuery}`;
+      let endpoint = `api/admin/search-employee?query=${query}`;
       if (selectedRole) {
         endpoint += `&role=${selectedRole}`;
       }
       
       const response = await axiosInstance.get(endpoint);
-
+      
       if (response.data.success) {
-        setAllEmployees(response.data.results);
+        setAllEmployees(response.data.results || response.data.employees);
       } else {
         console.error("Search failed:", response.data.message);
       }
@@ -107,6 +113,24 @@ const AdminEmployees = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Handle search input change with debounce
+  const handleSearchChange = (e) => {
+    const query = e.target.value;
+    setSearchQuery(query);
+    
+    // Clear any existing timeout
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+    
+    // Set a new timeout to delay the search
+    const timeoutId = setTimeout(() => {
+      searchEmployees(query);
+    }, 500); // 500ms delay
+    
+    setSearchTimeout(timeoutId);
   };
 
   const deleteEmployee = async (id) => {
@@ -142,9 +166,6 @@ const AdminEmployees = () => {
         );
         
         if (transferConfirm) {
-          // You can either:
-          // 1. Open a modal to select another employee
-          // 2. Prompt for an employee ID
           const transferId = prompt("Enter the Employee ID to transfer references to:");
           
           if (transferId) {
@@ -179,11 +200,25 @@ const AdminEmployees = () => {
   const handleRoleChange = (e) => {
     const role = e.target.value;
     setSelectedRole(role);
-    filterEmployeesByRole(role);
+    
+    if (searchQuery.trim()) {
+      // If there's a search query, apply both filters
+      searchEmployees(searchQuery);
+    } else {
+      // Otherwise just filter by role
+      filterEmployeesByRole(role);
+    }
   };
 
   useEffect(() => {
     getEmployeeData();
+    
+    // Clean up timeout on component unmount
+    return () => {
+      if (searchTimeout) {
+        clearTimeout(searchTimeout);
+      }
+    };
   }, []);
 
   // Reset filters function
@@ -204,23 +239,13 @@ const AdminEmployees = () => {
             <div className="flex-grow relative">
               <input
                 type="text"
-                placeholder="Search by username, department, or role"
+                placeholder="Search by name, department, or role"
                 className="w-full bg-white/50 text-gray-800 outline-none border border-[#944EF8]/20 py-2 px-4 rounded-lg backdrop-blur-xl focus:ring-2 focus:ring-[#944EF8]/50 transition-all duration-300 shadow-sm"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={handleSearchChange}
               />
               <FiSearch className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500" />
             </div>
-            <button
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-[#944EF8]/80 to-[#944EF8]/60 text-white border border-[#944EF8]/30 backdrop-blur-xl hover:from-[#944EF8]/90 hover:to-[#944EF8]/70 transition-all duration-300 shadow-md ${
-                isLoading ? "opacity-50 cursor-not-allowed" : ""
-              }`}
-              onClick={searchEmployees}
-              disabled={isLoading}
-            >
-              <FiSearch size={22} />
-              {isLoading ? "Loading..." : "Search"}
-            </button>
           </div>
           
           <div className="flex gap-2">
@@ -234,6 +259,8 @@ const AdminEmployees = () => {
               <option value="Advisor" className="bg-white">Advisors</option>
               <option value="Admin" className="bg-white">Admins</option>
               <option value="Team Leader" className="bg-white">Team Leaders</option>
+              <option value="Cashier" className="bg-white">Cashiers</option>
+              <option value="Service Advisor" className="bg-white">Service Advisors</option>
             </select>
             
             {(selectedRole || searchQuery) && (
@@ -257,6 +284,7 @@ const AdminEmployees = () => {
                 <th className="py-3 px-4 text-left font-semibold">Name</th>
                 <th className="py-3 px-4 text-left hidden md:table-cell font-semibold">Phone</th>
                 <th className="py-3 px-4 text-left font-semibold">Role</th>
+                <th className="py-3 px-4 text-left hidden md:table-cell font-semibold">Department</th>
                 <th className="py-3 px-4 text-left hidden md:table-cell font-semibold">Rating</th>
                 <th className="py-3 px-4 text-left font-semibold">Operations</th>
               </tr>
@@ -269,11 +297,12 @@ const AdminEmployees = () => {
                     <td className="py-3 px-4 text-gray-800 font-medium">{employee.Name}</td>
                     <td className="py-3 px-4 hidden md:table-cell text-gray-700">{employee.Phone}</td>
                     <td className="py-3 px-4 text-gray-700">{employee.Role}</td>
+                    <td className="py-3 px-4 hidden md:table-cell text-gray-700">{employee.Department || 'N/A'}</td>
                     <td className="py-3 px-4 text-center hidden md:table-cell text-gray-700">{employee.Rating}</td>
                     <td className="py-3 px-4 flex gap-3 items-center">
                       <AiOutlineInfoCircle 
                         className="text-[#944EF8] cursor-pointer hover:text-[#7a3dd0] transition-colors" 
-                        size={22} 
+                        size={22}
                         onClick={() => openEmployeeDetailModal(employee.EmployeeID)}
                       />
                       <FiRefreshCcw className="text-amber-500 cursor-pointer hover:text-amber-600 transition-colors" size={22} />

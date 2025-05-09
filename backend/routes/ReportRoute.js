@@ -972,6 +972,314 @@ if (report.ReportData) {
       });
     }
   });
+
+  router.get("/service-distribution", authenticateToken, authorizeRoles(["Admin"]), (req, res) => {
+    // Query to get the count of finished services grouped by description
+    const query = `
+      SELECT 
+        Description, 
+        COUNT(*) as count,
+        (COUNT(*) * 100.0 / (SELECT COUNT(*) FROM ServiceRecords WHERE Status = 'Finished')) as percentage
+      FROM 
+        ServiceRecords
+      WHERE 
+        Status = 'Finished'
+      GROUP BY 
+        Description
+      ORDER BY 
+        count DESC
+    `;
+  
+    db.query(query, (err, results) => {
+      if (err) {
+        console.error("Error fetching service distribution:", err);
+        return res.status(500).json({ 
+          success: false, 
+          message: "Error fetching service distribution data",
+          error: err
+        });
+      }
+  
+      // Format the results for the pie chart
+      const formattedResults = results.map(item => ({
+        name: item.Description,
+        value: Number.isFinite(Number(item.percentage)) ? parseFloat(Number(item.percentage).toFixed(1)) : 0
+
+      }));
+  
+      // If there are more than 5 services, group the smallest ones as "Other"
+      let pieChartData = formattedResults;
+      if (formattedResults.length > 5) {
+        // Sort by percentage (descending)
+        const sortedData = [...formattedResults].sort((a, b) => b.value - a.value);
+        
+        // Take top 5 services
+        const topServices = sortedData.slice(0, 5);
+        
+        // Calculate "Other" percentage
+        const otherPercentage = sortedData.slice(5).reduce((sum, item) => sum + item.value, 0);
+        
+        // Create final data with "Other" category
+        pieChartData = [
+          ...topServices,
+          { name: "Other", value: parseFloat(otherPercentage.toFixed(1)) }
+        ];
+      }
+  
+      return res.status(200).json({
+        success: true,
+        serviceDistribution: pieChartData
+      });
+    });
+  });
+
+
+  router.get("/department-revenue", authenticateToken, authorizeRoles(["Admin"]), (req, res) => {
+    // 1. Get all paid invoices and their JobCard_IDs and Totals.
+    // 2. Join with JobCards to get the Type (department) for each JobCard.
+    // 3. Group by department and sum the totals.
+  
+    const query = `
+      SELECT 
+        jc.Type AS department,
+        SUM(i.Total) AS revenue
+      FROM Invoice i
+      INNER JOIN JobCards jc ON i.JobCard_ID = jc.JobCardID
+      WHERE i.PaidStatus = 'Paid'
+      GROUP BY jc.Type
+      ORDER BY revenue DESC
+    `;
+  
+    db.query(query, (err, results) => {
+      if (err) {
+        console.error("Error fetching department revenue:", err);
+        return res.status(500).json({
+          success: false,
+          message: "Error fetching department revenue",
+          error: err
+        });
+      }
+  
+      // Format the results as an array of { department, revenue }
+      const departmentRevenue = results.map(row => ({
+        department: row.department || "Unknown",
+        revenue: Number(row.revenue) || 0
+      }));
+  
+      return res.status(200).json({
+        success: true,
+        departmentRevenue
+      });
+    });
+  });
+
+  router.get("/today-sales", authenticateToken, authorizeRoles(["Cashier"]), (req, res) => {
+    // Get current date (May 6, 2025)
+    const today = new Date();
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
+    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+    
+    // Format dates for MySQL query (YYYY-MM-DD HH:MM:SS)
+    const startDateFormatted = startOfDay.toISOString().slice(0, 19).replace('T', ' ');
+    const endDateFormatted = endOfDay.toISOString().slice(0, 19).replace('T', ' ');
+    
+    // Query to get sum of total sales for today where PaidStatus is 'Paid'
+    const query = `
+      SELECT SUM(Total) as todaySales
+      FROM Invoice
+      WHERE GeneratedDate BETWEEN ? AND ?
+      AND PaidStatus = 'Paid'
+    `;
+    
+    db.query(query, [startDateFormatted, endDateFormatted], (err, results) => {
+      if (err) {
+        console.error("Error fetching today's sales:", err);
+        return res.status(500).json({
+          success: false,
+          message: "Database error while fetching sales data",
+          error: err
+        });
+      }
+      
+      // Extract the total sales amount (handle null case if no sales)
+      const todaySales = results[0].todaySales || 0;
+      
+      return res.status(200).json({
+        success: true,
+        date: today.toISOString().split('T')[0],
+        todaySales
+      });
+    });
+  });
+  
+  
+  router.get("/unpaid-invoices", authenticateToken, authorizeRoles(["Cashier"]), (req, res) => {
+    // Query to get count of invoices where PaidStatus is not 'Paid'
+    const query = `
+      SELECT COUNT(*) as unpaidCount
+      FROM Invoice
+      WHERE PaidStatus != 'Paid'
+    `;
+    
+    db.query(query, (err, results) => {
+      if (err) {
+        console.error("Error fetching unpaid invoices count:", err);
+        return res.status(500).json({
+          success: false,
+          message: "Database error while fetching unpaid invoices data",
+          error: err
+        });
+      }
+      
+      // Extract the unpaid count
+      const unpaidCount = results[0].unpaidCount || 0;
+      
+      return res.status(200).json({
+        success: true,
+        unpaidCount
+      });
+    });
+  });
+  
+  router.get("/payment-methods-stats", authenticateToken, authorizeRoles(["Cashier"]), (req, res) => {
+    // Query to get count of invoices by payment method
+    const query = `
+      SELECT 
+        PaymentMethod,
+        COUNT(*) as count,
+        SUM(Total) as amount
+      FROM Invoice
+      WHERE PaidStatus = 'Paid'
+      GROUP BY PaymentMethod
+    `;
+    
+    db.query(query, (err, results) => {
+      if (err) {
+        console.error("Error fetching payment methods stats:", err);
+        return res.status(500).json({
+          success: false,
+          message: "Database error while fetching payment methods data",
+          error: err
+        });
+      }
+      
+      // Format the results
+      const paymentStats = {
+        cash: {
+          count: 0,
+          amount: 0
+        },
+        payhere: {
+          count: 0,
+          amount: 0
+        },
+        other: {
+          count: 0,
+          amount: 0
+        }
+      };
+      
+      results.forEach(result => {
+        if (result.PaymentMethod === 'Cash') {
+          paymentStats.cash.count = result.count;
+          paymentStats.cash.amount = parseFloat(result.amount) || 0;
+        } else if (result.PaymentMethod === 'PayHere') {
+          paymentStats.payhere.count = result.count;
+          paymentStats.payhere.amount = parseFloat(result.amount) || 0;
+        } else {
+          paymentStats.other.count += result.count;
+          paymentStats.other.amount += parseFloat(result.amount) || 0;
+        }
+      });
+      
+      return res.status(200).json({
+        success: true,
+        paymentStats
+      });
+    });
+  });
+  
+  router.get("/today-transactions", authenticateToken, authorizeRoles(["Cashier"]), (req, res) => {
+    // Get current date (May 6, 2025)
+    const today = new Date();
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
+    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+    
+    // Format dates for MySQL query
+    const startDateFormatted = startOfDay.toISOString().slice(0, 19).replace('T', ' ');
+    const endDateFormatted = endOfDay.toISOString().slice(0, 19).replace('T', ' ');
+    
+    // Query to get count of today's transactions
+    const query = `
+      SELECT COUNT(*) as todayTransactions
+      FROM Invoice
+      WHERE GeneratedDate BETWEEN ? AND ?
+    `;
+    
+    db.query(query, [startDateFormatted, endDateFormatted], (err, results) => {
+      if (err) {
+        console.error("Error fetching today's transactions:", err);
+        return res.status(500).json({
+          success: false,
+          message: "Database error while fetching transaction data",
+          error: err
+        });
+      }
+      
+      // Extract the transaction count
+      const todayTransactions = results[0].todayTransactions || 0;
+      
+      return res.status(200).json({
+        success: true,
+        date: today.toISOString().split('T')[0],
+        todayTransactions
+      });
+    });
+  });
+
+  router.get("/recent-transactions", authenticateToken, authorizeRoles(["Cashier"]), (req, res) => {
+    // Get current date (May 6, 2025)
+    const today = new Date();
+    
+    // Query to get the 5 most recent transactions with customer and service details
+    const query = `
+      SELECT 
+        i.Invoice_ID as id,
+        CONCAT(c.FirstName, ' ', c.SecondName) as customer,
+        sr.Description as service,
+        i.Total as amount,
+        TIME_FORMAT(TIME(i.GeneratedDate), '%H:%i') as time,
+        i.PaidStatus as status,
+        i.PaymentMethod as paymentMethod
+      FROM Invoice i
+      JOIN JobCards j ON i.JobCard_ID = j.JobCardID
+      JOIN Appointments a ON j.AppointmentID = a.AppointmentID
+      JOIN Customers c ON a.CustomerID = c.CustomerID
+      JOIN ServiceRecords sr ON sr.JobCardID = j.JobCardID
+      ORDER BY i.GeneratedDate DESC
+      LIMIT 5
+    `;
+    
+    db.query(query, (err, results) => {
+      if (err) {
+        console.error("Error fetching recent transactions:", err);
+        return res.status(500).json({
+          success: false,
+          message: "Database error while fetching recent transactions",
+          error: err
+        });
+      }
+      
+      return res.status(200).json({
+        success: true,
+        recentTransactions: results
+      });
+    });
+  });
+  
+  
+  
+  
   
   
   

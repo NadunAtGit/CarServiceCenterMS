@@ -197,6 +197,36 @@ router.get("/get-not-confirmed", authenticateToken, authorizeRoles(['Admin','Cus
     }
 });
 
+router.get("/get-rescheduled", authenticateToken, authorizeRoles(['Admin','Customer']), async (req, res) => {
+    try {
+        const query = `
+            SELECT * 
+            FROM appointments 
+            WHERE Status IN (?) 
+            ORDER BY AppointmentMadeDate DESC
+        `;
+        
+        const appointments = await new Promise((resolve, reject) => {
+            db.query(query, ["Rescheduled"], (err, result) => {
+                if (err) {
+                    console.error("Error fetching appointments:", err);
+                    return reject(err);
+                }
+                resolve(result);
+            });
+        });
+
+        res.status(200).json({
+            success: true,
+            appointments,
+        });
+    } catch (error) {
+        console.error("Error fetching not confirmed or rescheduled appointments:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+
 router.get("/get-confirmed-user", authenticateToken, authorizeRoles(['Customer']), async (req, res) => {
     try {
         // Get the customer ID from the authenticated user object

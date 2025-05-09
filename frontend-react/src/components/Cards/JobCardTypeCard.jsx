@@ -1,9 +1,11 @@
-import React from 'react';
-import { FiTool, FiCheckCircle, FiClock, FiAlertCircle } from 'react-icons/fi';
+import React, { useState } from 'react';
+import { FiTool, FiCheckCircle, FiClock, FiAlertCircle, FiChevronDown, FiChevronUp } from 'react-icons/fi';
 
 const JobCardTypeCard = ({ jobCard }) => {
-  // Safely check if jobCard and Services exist before using them
-  const services = jobCard?.Services || [];
+  const [expanded, setExpanded] = useState(false);
+  
+  // Safely check if jobCard and ServiceRecords exist before using them
+  const services = jobCard?.ServiceRecords || [];
   
   // Calculate completion stats only if services exist
   const completedServices = services.filter(s => s.Status === 'Finished').length;
@@ -44,6 +46,11 @@ const JobCardTypeCard = ({ jobCard }) => {
       default:
         return <FiAlertCircle className="text-gray-500" />;
     }
+  };
+
+  // Toggle expanded state
+  const toggleExpand = () => {
+    setExpanded(!expanded);
   };
 
   // If jobCard is undefined, show a placeholder
@@ -87,59 +94,69 @@ const JobCardTypeCard = ({ jobCard }) => {
           </div>
         )}
         
-        {/* Only show services section if there are services */}
+        {/* Progress information */}
         {services.length > 0 && (
-          <>
-            <div className="mb-3">
-              <div className="flex justify-between items-center mb-1">
-                <h3 className="font-medium text-gray-800">
-                  Services ({totalServices}):
-                </h3>
-                <span className="text-sm text-gray-600">
-                  {completedServices} of {totalServices} completed
-                </span>
-              </div>
-              
-              {/* Progress bar */}
-              <div className="w-full bg-gray-200 rounded-full h-2.5">
-                <div 
-                  className="bg-[#944EF8] h-2.5 rounded-full" 
-                  style={{
-                    width: `${progressPercentage}%`
-                  }}
-                />
-              </div>
+          <div className="mb-3">
+            <div className="flex justify-between items-center mb-1">
+              <h3 className="font-medium text-gray-800">
+                Services ({totalServices}):
+              </h3>
+              <span className="text-sm text-gray-600">
+                {completedServices} of {totalServices} completed
+              </span>
             </div>
-          
-            <div className="space-y-3">
-              {services.map(service => (
-                <div 
-                  key={service.ServiceRecord_ID || service.serviceRecordId} 
-                  className="bg-white p-3 rounded-md border border-gray-100 shadow-sm"
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="font-medium text-gray-800">
-                        {service.Description || service.description || 'Unknown Service'}
-                      </h4>
-                      <p className="text-sm text-gray-600">
-                        {service.ServiceType || service.serviceType || 'General Service'}
-                      </p>
-                    </div>
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      service.Status === 'Finished' 
-                        ? 'bg-green-100 text-green-800' 
-                        : service.Status === 'Ongoing' 
-                          ? 'bg-yellow-100 text-yellow-800'
-                          : 'bg-gray-100 text-gray-800'
-                    }`}>
-                      {service.Status || 'Not Started'}
-                    </span>
+            
+            {/* Progress bar */}
+            <div className="w-full bg-gray-200 rounded-full h-2.5">
+              <div 
+                className="bg-[#944EF8] h-2.5 rounded-full" 
+                style={{
+                  width: `${progressPercentage}%`
+                }}
+              />
+            </div>
+          </div>
+        )}
+        
+        {/* Expand/Collapse Button */}
+        <button 
+          onClick={toggleExpand}
+          className="w-full flex items-center justify-center py-2 mt-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+        >
+          <span className="mr-2">{expanded ? 'Hide' : 'Show'} Service Records</span>
+          {expanded ? <FiChevronUp /> : <FiChevronDown />}
+        </button>
+        
+        {/* Expandable Service Records Section */}
+        {expanded && services.length > 0 && (
+          <div className="mt-4 space-y-3">
+            {services.map(service => (
+              <div 
+                key={service.ServiceRecord_ID || service.serviceRecordId} 
+                className="bg-white p-3 rounded-md border border-gray-100 shadow-sm"
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="font-medium text-gray-800">
+                      {service.Description || service.description || 'Unknown Service'}
+                    </h4>
+                    <p className="text-sm text-gray-600">
+                      {service.ServiceType || service.serviceType || 'General Service'}
+                    </p>
                   </div>
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    service.Status === 'Finished' 
+                      ? 'bg-green-100 text-green-800' 
+                      : service.Status === 'Ongoing' 
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    {service.Status || 'Not Started'}
+                  </span>
                 </div>
-              ))}
-            </div>
-          </>
+              </div>
+            ))}
+          </div>
         )}
         
         {/* Show a message if no services are available */}

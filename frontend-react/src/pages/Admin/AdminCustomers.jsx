@@ -2,11 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { FiSearch, FiRefreshCw } from "react-icons/fi";
 import { AiOutlineCar, AiOutlineUser } from "react-icons/ai";
 import axiosInstance from '../../utils/AxiosInstance';
+import CustomerDetailsModal from "../../components/Modals/CustomerDetailsModal";
+import CustomerVehiclesModal from '../../components/Modals/CustomerVehiclesModal';
 
 const AdminCustomers = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [customers, setCustomers] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCustomerId, setSelectedCustomerId] = useState(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [isVehiclesModalOpen, setIsVehiclesModalOpen] = useState(false);
+  const [searchTimeout, setSearchTimeout] = useState(null);
 
   const fetchCustomers = async () => {
     setIsLoading(true);
@@ -26,10 +32,37 @@ const AdminCustomers = () => {
 
   useEffect(() => {
     fetchCustomers();
+    
+    // Clean up timeout on component unmount
+    return () => {
+      if (searchTimeout) {
+        clearTimeout(searchTimeout);
+      }
+    };
   }, []);
+
+  // Handle search input with debounce
+  const handleSearchChange = (e) => {
+    const query = e.target.value;
+    setSearchQuery(query);
+    
+    // Clear any existing timeout
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+    
+    // Set a new timeout to delay the search
+    const timeoutId = setTimeout(() => {
+      // Just update the filter, no API call needed since we filter client-side
+    }, 300); // 300ms delay
+    
+    setSearchTimeout(timeoutId);
+  };
 
   // Filter customers based on search query
   const filteredCustomers = customers.filter(customer => {
+    if (!searchQuery.trim()) return true;
+    
     const query = searchQuery.toLowerCase();
     return (
       customer.CustomerID.toLowerCase().includes(query) ||
@@ -40,6 +73,16 @@ const AdminCustomers = () => {
       (customer.Username && customer.Username.toLowerCase().includes(query))
     );
   });
+
+  const handleViewCustomerDetails = (customerId) => {
+    setSelectedCustomerId(customerId);
+    setIsDetailsModalOpen(true);
+  };
+
+  const handleViewCustomerVehicles = (customerId) => {
+    setSelectedCustomerId(customerId);
+    setIsVehiclesModalOpen(true);
+  };
 
   return (
     <div className="container mx-auto px-4 py-6 bg-[#f5f5f5] min-h-screen">
@@ -55,21 +98,10 @@ const AdminCustomers = () => {
                 placeholder="Search customers by ID, name, phone, or email"
                 className="w-full bg-white text-gray-800 outline-none border border-[#944EF8]/20 py-2 px-4 rounded-lg focus:ring-2 focus:ring-[#944EF8]/50 transition-all duration-300 shadow-sm"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && fetchCustomers()}
+                onChange={handleSearchChange}
               />
               <FiSearch className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500" />
             </div>
-            <button
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg bg-[#944EF8] text-white border border-[#944EF8]/30 hover:bg-[#7b3be0] transition-all duration-300 shadow-md ${
-                isLoading ? "opacity-50 cursor-not-allowed" : ""
-              }`}
-              onClick={fetchCustomers}
-              disabled={isLoading}
-            >
-              <FiSearch size={18} />
-              Search
-            </button>
           </div>
           
           <button
@@ -119,11 +151,13 @@ const AdminCustomers = () => {
                           className="text-[#944EF8] cursor-pointer hover:text-[#7a3dd0] transition-colors" 
                           size={20}
                           title="View Vehicles"
+                          onClick={() => handleViewCustomerVehicles(customer.CustomerID)}
                         />
                         <AiOutlineUser
                           className="text-[#944EF8] cursor-pointer hover:text-[#7a3dd0] transition-colors"
                           size={20}
                           title="View Profile"
+                          onClick={() => handleViewCustomerDetails(customer.CustomerID)}
                         />
                       </div>
                     </td>
@@ -140,6 +174,25 @@ const AdminCustomers = () => {
           </table>
         </div>
       </div>
+      
+      {/* Customer Details Modal */}
+      <CustomerDetailsModal 
+        isOpen={isDetailsModalOpen}
+        onClose={() => setIsDetailsModalOpen(false)}
+        customerId={selectedCustomerId}
+        onViewVehicles={(customerId) => {
+          setSelectedCustomerId(customerId);
+          setIsVehiclesModalOpen(true);
+          setIsDetailsModalOpen(false);
+        }}
+      />
+      
+      {/* Customer Vehicles Modal */}
+      <CustomerVehiclesModal 
+        isOpen={isVehiclesModalOpen}
+        onClose={() => setIsVehiclesModalOpen(false)}
+        customerId={selectedCustomerId}
+      />
     </div>
   );
 };

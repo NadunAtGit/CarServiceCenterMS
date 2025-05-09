@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { FiSearch, FiCalendar, FiX } from "react-icons/fi";
+import React, { useEffect, useState, useCallback } from "react";
+import { FiSearch, FiCalendar, FiX, FiRefreshCw } from "react-icons/fi";
 import axiosInstance from "../../utils/AxiosInstance";
 import AppointmentCard from "../../components/Cards/AppointmentCard";
 import Slider from "react-slick";
@@ -16,6 +16,7 @@ const AdminAppointments = () => {
   const [notConfirmed, setNotConfirmed] = useState([]);
   const [selectedDate, setSelectedDate] = useState(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [searchTimeout, setSearchTimeout] = useState(null);
 
   // Format date to YYYY-MM-DD format for API requests and consistent comparison
   const formatDateForAPI = (date) => {
@@ -61,97 +62,65 @@ const AdminAppointments = () => {
     }
   };
 
-  const searchAppointments = async () => {
-    setIsLoading(true);
-    
-    try {
-      // If we have a date filter, we should fetch filtered data from API
-      if (selectedDate) {
-        const formattedDate = formatDateForAPI(selectedDate);
-        
-        // Make API call to get appointments filtered by date
-        const response = await axiosInstance.get(`api/appointments/filter-by-date/${formattedDate}`);
-        
-        if (response.data.success) {
-          let results = response.data.appointments;
-          
-          // If we also have a search query, further filter the results
-          if (searchQuery.trim()) {
-            const query = searchQuery.toLowerCase();
-            results = results.filter(appointment => 
-              (appointment.AppointmentID && appointment.AppointmentID.toString().toLowerCase().includes(query)) ||
-              (appointment.CustomerID && appointment.CustomerID.toString().toLowerCase().includes(query)) ||
-              (appointment.VehicleID && appointment.VehicleID.toLowerCase().includes(query)) ||
-              (appointment.Status && appointment.Status.toLowerCase().includes(query))
-            );
-          }
-          
-          setFilteredAppointments(results);
-        } else {
-          console.error("Failed to fetch filtered appointments:", response.data.message);
-          setFilteredAppointments([]);
-        }
-      } 
-      // If no date filter but we have search query
-      else if (searchQuery.trim()) {
-        // Filter locally if we're only using search query
-        const query = searchQuery.toLowerCase();
-        const results = appointments.filter(appointment => 
-          (appointment.AppointmentID && appointment.AppointmentID.toString().toLowerCase().includes(query)) ||
-          (appointment.CustomerID && appointment.CustomerID.toString().toLowerCase().includes(query)) ||
-          (appointment.VehicleID && appointment.VehicleID.toLowerCase().includes(query)) ||
-          (appointment.Status && appointment.Status.toLowerCase().includes(query))
-        );
-        setFilteredAppointments(results);
-      } 
-      // If no filters at all
-      else {
-        setFilteredAppointments(appointments);
-      }
-    } catch (error) {
-      console.error("Error searching appointments:", error);
-      setFilteredAppointments([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Alternative implementation for client-side filtering if API endpoint is not available
-  const clientSideSearch = () => {
+  // Apply both filters independently
+  const applyFilters = useCallback((query, date) => {
     setIsLoading(true);
     
     try {
       let results = [...appointments];
-
-      // Apply search query filter
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase();
+      
+      // Apply search query filter if it exists
+      if (query && query.trim()) {
+        const searchTerm = query.toLowerCase();
         results = results.filter(appointment => 
-          (appointment.AppointmentID && appointment.AppointmentID.toString().toLowerCase().includes(query)) ||
-          (appointment.CustomerID && appointment.CustomerID.toString().toLowerCase().includes(query)) ||
-          (appointment.VehicleID && appointment.VehicleID.toLowerCase().includes(query)) ||
-          (appointment.Status && appointment.Status.toLowerCase().includes(query))
+          (appointment.AppointmentID && appointment.AppointmentID.toString().toLowerCase().includes(searchTerm)) ||
+          (appointment.CustomerID && appointment.CustomerID.toString().toLowerCase().includes(searchTerm)) ||
+          (appointment.VehicleID && appointment.VehicleID.toLowerCase().includes(searchTerm)) ||
+          (appointment.Status && appointment.Status.toLowerCase().includes(searchTerm))
         );
       }
 
-      // Apply date filter - Make sure to handle date formats correctly
-      if (selectedDate) {
-        const filterDate = formatDateForAPI(selectedDate);
-        
+      // Apply date filter independently if it exists
+      if (date) {
+        const filterDate = formatDateForAPI(date);
         results = results.filter(appointment => {
-          // Ensure both dates are in the same format for comparison
-          const appointmentDate = appointment.Date;
+          const appointmentDate = appointment.Date ? appointment.Date.split('T')[0] : null;
           return appointmentDate === filterDate;
         });
       }
-
+      
       setFilteredAppointments(results);
     } catch (error) {
-      console.error("Error searching appointments:", error);
+      console.error("Error filtering appointments:", error);
       setFilteredAppointments([]);
     } finally {
       setIsLoading(false);
     }
+  }, [appointments]);
+
+  // Handle search input with debounce
+  const handleSearchChange = (e) => {
+    const query = e.target.value;
+    setSearchQuery(query);
+    
+    // Clear any existing timeout
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+    
+    // Set a new timeout to delay the search
+    const timeoutId = setTimeout(() => {
+      applyFilters(query, selectedDate);
+    }, 500); // 500ms delay
+    
+    setSearchTimeout(timeoutId);
+  };
+
+  // Handle date change
+  const handleDateChange = (date) => {
+    setSelectedDate(date);
+    setShowDatePicker(false);
+    applyFilters(searchQuery, date);
   };
 
   const deleteAppointment = async (id) => {
@@ -184,11 +153,6 @@ const AdminAppointments = () => {
     }
   };
 
-  const handleDateChange = (date) => {
-    setSelectedDate(date);
-    setShowDatePicker(false);
-  };
-
   const clearFilters = () => {
     setSearchQuery("");
     setSelectedDate(null);
@@ -212,10 +176,14 @@ const AdminAppointments = () => {
   useEffect(() => {
     fetchAppointments();
     fetchNotConfirmed();
+    
+    // Clean up timeout on component unmount
+    return () => {
+      if (searchTimeout) {
+        clearTimeout(searchTimeout);
+      }
+    };
   }, []);
-
-  // Changed to manually trigger search instead of auto-searching on date change
-  // This gives more control to the user
 
   const settings = {
     dots: true,
@@ -285,8 +253,7 @@ const AdminAppointments = () => {
                 placeholder="Search by ID, customer, vehicle, or status"
                 className="w-full bg-white/70 text-gray-800 outline-none border border-[#944EF8]/20 py-2 px-4 rounded-lg backdrop-blur-xl focus:ring-2 focus:ring-[#944EF8]/30 transition-all duration-300"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && searchAppointments()}
+                onChange={handleSearchChange}
               />
               <FiSearch className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
             </div>
@@ -306,6 +273,7 @@ const AdminAppointments = () => {
                     onClick={(e) => {
                       e.stopPropagation();
                       setSelectedDate(null);
+                      applyFilters(searchQuery, null); // Apply filters without date
                     }}
                   />
                 )}
@@ -322,20 +290,13 @@ const AdminAppointments = () => {
                 </div>
               )}
             </div>
-
-            <button
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-[#944EF8]/80 to-[#944EF8]/60 text-white border border-[#944EF8]/30 backdrop-blur-xl hover:from-[#944EF8]/90 hover:to-[#944EF8]/70 transition-all duration-300 shadow-md"
-              onClick={searchAppointments}
-            >
-              <FiSearch size={22} />
-              Search
-            </button>
           </div>
           
           <button
-            className="col-span-full md:col-span-1 px-4 py-2 rounded-lg bg-gray-200 text-gray-700 border border-gray-300 hover:bg-gray-300 transition-all duration-300"
+            className="col-span-full md:col-span-1 px-4 py-2 rounded-lg bg-gray-200 text-gray-700 border border-gray-300 hover:bg-gray-300 transition-all duration-300 flex items-center justify-center gap-2"
             onClick={clearFilters}
           >
+            <FiRefreshCw size={16} />
             Clear Filters
           </button>
         </div>
@@ -419,7 +380,7 @@ const AdminAppointments = () => {
           color: #944EF8;
           opacity: 1;
         }
-        .custom-slider .slick-prev:before, 
+        .custom-slider .slick-prev:before,
         .custom-slider .slick-next:before {
           color: #944EF8;
         }

@@ -29,7 +29,7 @@ const TeamLeaderAssign = () => {
   return (
     <div className="mx-auto px-4">
       <div className="w-full flex flex-col">
-        <h1 className="text-xl font-bold mb-5 text-left">Not Assigned Job Cards</h1>
+        <h1 className="text-xl font-bold mb-5 text-left">Not Job Cards to Assign</h1>
 
         {isLoading ? (
           <p className="text-center">Loading job cards...</p>

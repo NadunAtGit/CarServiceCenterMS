@@ -26,126 +26,154 @@ const AdminDashboard = () => {
       const TotalSalesResponse = await axiosInstance.get('/api/reports/this-month-sales');
       console.log("API Response:", TotalSalesResponse.data);
 
-// Check if the response has the expected structure
-          if (TotalSalesResponse.data && TotalSalesResponse.data.totalSales) {
-            const salesValue = parseFloat(TotalSalesResponse.data.totalSales);
-            console.log("Parsed Sales Value:", salesValue);
-            
-            if (!isNaN(salesValue)) {
-              setDashboardData(prevData => ({
-                ...prevData,
-                totalSales: salesValue
-              }));
-            } else {
-              console.error("Failed to parse sales value:", TotalSalesResponse.data.totalSales);
-              setDashboardData(prevData => ({
-                ...prevData,
-                totalSales: 0
-              }));
-            }
-          } else {
-            console.error("Unexpected API response format:", TotalSalesResponse.data);
-            setDashboardData(prevData => ({
-              ...prevData,
-              totalSales: 0
-            }));
-          }
+      // Check if the response has the expected structure
+      if (TotalSalesResponse.data && TotalSalesResponse.data.totalSales) {
+        const salesValue = parseFloat(TotalSalesResponse.data.totalSales);
+        console.log("Parsed Sales Value:", salesValue);
+        
+        if (!isNaN(salesValue)) {
+          setDashboardData(prevData => ({
+            ...prevData,
+            totalSales: salesValue
+          }));
+        } else {
+          console.error("Failed to parse sales value:", TotalSalesResponse.data.totalSales);
+          setDashboardData(prevData => ({
+            ...prevData,
+            totalSales: 0
+          }));
+        }
+      } else {
+        console.error("Unexpected API response format:", TotalSalesResponse.data);
+        setDashboardData(prevData => ({
+          ...prevData,
+          totalSales: 0
+        }));
+      }
 
-          const TotalAppointmentsResponse = await axiosInstance.get('/api/reports/this-month-appointments');
-          console.log("API Response (Appointments):", TotalAppointmentsResponse.data);
+      const TotalAppointmentsResponse = await axiosInstance.get('/api/reports/this-month-appointments');
+      console.log("API Response (Appointments):", TotalAppointmentsResponse.data);
 
-          if (TotalAppointmentsResponse.data && TotalAppointmentsResponse.data.totalAppointments) {
-            const appointmentsValue = parseInt(TotalAppointmentsResponse.data.totalAppointments);
-            console.log("Parsed Appointments Value:", appointmentsValue);
-            
-            if (!isNaN(appointmentsValue)) {
-              setDashboardData(prevData => ({
-                ...prevData,
-                totalAppointments: appointmentsValue
-              }));
-            } else {
-              console.error("Failed to parse appointments value:", TotalAppointmentsResponse.data.totalAppointments);
-              setDashboardData(prevData => ({
-                ...prevData,
-                totalAppointments: 0
-              }));
-            }
-          } else {
-            console.error("Unexpected API response format for appointments:", TotalAppointmentsResponse.data);
-            setDashboardData(prevData => ({
-              ...prevData,
-              totalAppointments: 0
-            }));
-          }
+      if (TotalAppointmentsResponse.data && TotalAppointmentsResponse.data.totalAppointments) {
+        const appointmentsValue = parseInt(TotalAppointmentsResponse.data.totalAppointments);
+        console.log("Parsed Appointments Value:", appointmentsValue);
+        
+        if (!isNaN(appointmentsValue)) {
+          setDashboardData(prevData => ({
+            ...prevData,
+            totalAppointments: appointmentsValue
+          }));
+        } else {
+          console.error("Failed to parse appointments value:", TotalAppointmentsResponse.data.totalAppointments);
+          setDashboardData(prevData => ({
+            ...prevData,
+            totalAppointments: 0
+          }));
+        }
+      } else {
+        console.error("Unexpected API response format for appointments:", TotalAppointmentsResponse.data);
+        setDashboardData(prevData => ({
+          ...prevData,
+          totalAppointments: 0
+        }));
+      }
 
+      // Inside fetchDashboardData function
+      const monthlySalesResponse = await axiosInstance.get('/api/reports/monthly-sales');
+      console.log("Monthly Sales Data:", monthlySalesResponse.data);
 
-          // Inside fetchDashboardData function
-          const monthlySalesResponse = await axiosInstance.get('/api/reports/monthly-sales');
-          console.log("Monthly Sales Data:", monthlySalesResponse.data);
+      if (Array.isArray(monthlySalesResponse.data) && monthlySalesResponse.data.length > 0) {
+        // Find the index of April to reorder the months starting from April
+        const monthsOrder = ["January", "February", "March", "April", "May", "June", 
+                            "July", "August", "September", "October", "November", "December"];
+        const aprilIndex = monthsOrder.indexOf("April");
+        
+        // Reorder months to start from April
+        const reorderedMonths = [
+          ...monthsOrder.slice(aprilIndex),
+          ...monthsOrder.slice(0, aprilIndex)
+        ];
+        
+        // Create a map of the API data for easy lookup
+        const salesByMonth = {};
+        monthlySalesResponse.data.forEach(item => {
+          salesByMonth[item.month] = parseFloat(item.totalSales);
+        });
+        
+        // Create the chart data array starting from April
+        const chartData = reorderedMonths.map(month => ({
+          month: month.substring(0, 3), // Abbreviate month names to first 3 letters
+          sales: salesByMonth[month] || 0 // Use 0 if no data for that month
+        }));
+        
+        setMonthlySales(chartData);
+      } else {
+        console.error("Unexpected API response format:", monthlySalesResponse.data);
+        // Fallback to mock data if needed
+      }
 
-          if (Array.isArray(monthlySalesResponse.data) && monthlySalesResponse.data.length > 0) {
-            // Find the index of April to reorder the months starting from April
-            const monthsOrder = ["January", "February", "March", "April", "May", "June", 
-                                "July", "August", "September", "October", "November", "December"];
-            const aprilIndex = monthsOrder.indexOf("April");
-            
-            // Reorder months to start from April
-            const reorderedMonths = [
-              ...monthsOrder.slice(aprilIndex),
-              ...monthsOrder.slice(0, aprilIndex)
-            ];
-            
-            // Create a map of the API data for easy lookup
-            const salesByMonth = {};
-            monthlySalesResponse.data.forEach(item => {
-              salesByMonth[item.month] = parseFloat(item.totalSales);
-            });
-            
-            // Create the chart data array starting from April
-            const chartData = reorderedMonths.map(month => ({
-              month: month.substring(0, 3), // Abbreviate month names to first 3 letters
-              sales: salesByMonth[month] || 0 // Use 0 if no data for that month
-            }));
-            
-            setMonthlySales(chartData);
-          } else {
-            console.error("Unexpected API response format:", monthlySalesResponse.data);
-            // Fallback to mock data if needed
-          }
+      // Add this to your fetchDashboardData function
+      const employeeCountResponse = await axiosInstance.get('/api/reports/count-employees');
+      console.log("Employee Count Response:", employeeCountResponse.data);
 
+      // Check if the response has the expected structure
+      if (employeeCountResponse.data && employeeCountResponse.data.employee_count !== undefined) {
+        const employeeCount = parseInt(employeeCountResponse.data.employee_count);
+        console.log("Parsed Employee Count:", employeeCount);
+        
+        if (!isNaN(employeeCount)) {
+          setDashboardData(prevData => ({
+            ...prevData,
+            totalEmployees: employeeCount
+          }));
+        } else {
+          console.error("Failed to parse employee count:", employeeCountResponse.data.totalEmployees);
+          setDashboardData(prevData => ({
+            ...prevData,
+            totalEmployees: 0
+          }));
+        }
+      } else {
+        console.error("Unexpected API response format for employee count:", employeeCountResponse.data);
+        setDashboardData(prevData => ({
+          ...prevData,
+          totalEmployees: 0
+        }));
+      }
 
-          // Add this to your fetchDashboardData function
-          const employeeCountResponse = await axiosInstance.get('/api/reports/count-employees');
-          console.log("Employee Count Response:", employeeCountResponse.data);
+      // Fetch service distribution data from API
+      const serviceDistributionResponse = await axiosInstance.get('/api/reports/service-distribution');
+      console.log("Service Distribution Data:", serviceDistributionResponse.data);
 
-          // Check if the response has the expected structure
-          if (employeeCountResponse.data && employeeCountResponse.data.employee_count !== undefined) {
-            const employeeCount = parseInt(employeeCountResponse.data.employee_count);
-            console.log("Parsed Employee Count:", employeeCount);
-            
-            if (!isNaN(employeeCount)) {
-              setDashboardData(prevData => ({
-                ...prevData,
-                totalEmployees: employeeCount
-              }));
-            } else {
-              console.error("Failed to parse employee count:", employeeCountResponse.data.totalEmployees);
-              setDashboardData(prevData => ({
-                ...prevData,
-                totalEmployees: 0
-              }));
-            }
-          } else {
-            console.error("Unexpected API response format for employee count:", employeeCountResponse.data);
-            setDashboardData(prevData => ({
-              ...prevData,
-              totalEmployees: 0
-            }));
-          }
-
-
-
-
+      if (serviceDistributionResponse.data.success && Array.isArray(serviceDistributionResponse.data.serviceDistribution)) {
+        const services = serviceDistributionResponse.data.serviceDistribution;
+        
+        // Process data to show top 4 and group others
+        if (services.length > 4) {
+          // Sort by value (percentage) in descending order
+          const sortedServices = [...services].sort((a, b) => b.value - a.value);
+          
+          // Take top 4 services
+          const top4Services = sortedServices.slice(0, 4);
+          
+          // Calculate "Other" percentage by summing the rest
+          const otherPercentage = sortedServices.slice(4).reduce((sum, item) => sum + item.value, 0);
+          
+          // Create final data with "Other" category
+          const finalData = [
+            ...top4Services,
+            { name: "Other", value: otherPercentage }
+          ];
+          
+          setServiceDistribution(finalData);
+        } else {
+          setServiceDistribution(services);
+        }
+      } else {
+        console.error("Unexpected API response format for service distribution:", serviceDistributionResponse.data);
+        // Fallback to empty array or mock data
+        setServiceDistribution([]);
+      }
 
       // Mock top employees data
       setTopEmployees([
@@ -156,26 +184,19 @@ const AdminDashboard = () => {
         { id: 'EMP014', name: 'Michael Brown', role: 'Advisor', performance: 86, revenue: 12100 }
       ]);
 
-      // Mock monthly sales data
-      
-
-      // Mock service distribution data
-      setServiceDistribution([
-        { name: 'Oil Change', value: 35 },
-        { name: 'Brake Service', value: 20 },
-        { name: 'Tire Replacement', value: 15 },
-        { name: 'Engine Repair', value: 12 },
-        { name: 'Transmission', value: 8 },
-        { name: 'Other', value: 10 }
-      ]);
-
       // Mock revenue by department
-      setRevenueByDepartment([
-        { department: 'Repairs', revenue: 68000 },
-        { department: 'Maintenance', revenue: 45000 },
-        { department: 'Parts', revenue: 23000 },
-        { department: 'Detailing', revenue: 11250 }
-      ]);
+      // Inside fetchDashboardData function
+const departmentRevenueResponse = await axiosInstance.get('/api/reports/department-revenue');
+console.log("Department Revenue Data:", departmentRevenueResponse.data);
+
+if (departmentRevenueResponse.data.success && Array.isArray(departmentRevenueResponse.data.departmentRevenue)) {
+  setRevenueByDepartment(departmentRevenueResponse.data.departmentRevenue);
+} else {
+  console.error("Unexpected API response format for department revenue:", departmentRevenueResponse.data);
+  // Fallback to empty array or mock data if needed
+  setRevenueByDepartment([]);
+}
+
 
     } catch (error) {
       console.error("Error fetching dashboard data:", error);

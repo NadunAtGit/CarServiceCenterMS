@@ -30,17 +30,34 @@ const EmployeeDashBoard = () => {
   };
 
   // Handle form submission
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    // Add form submission logic here
-    console.log("Leave application submitted:", formData);
-    // Reset form
-    setFormData({
-      leaveDate: '',
-      leaveType: '',
-      reason: ''
-    });
-  };
+  // Handle form submission
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setFormError(null);
+  
+  try {
+    const response = await axiosInstance.post('api/admin/apply-leave', formData);
+    
+    if (response.data.success) {
+      // Show success message
+      alert("Leave application submitted successfully");
+      // Reset form
+      setFormData({
+        leaveDate: '',
+        leaveType: '',
+        reason: ''
+      });
+      // You might want to refresh the leave applications list here
+      // fetchLeaveApplications(); // Assuming you have this function
+    } else {
+      setFormError(response.data.message || "Failed to submit leave application");
+    }
+  } catch (error) {
+    console.error("Error submitting leave application:", error);
+    setFormError(error.response?.data?.message || "An error occurred while submitting your leave application");
+  }
+};
+
 
   const getUserInfo = async () => {
     try {
