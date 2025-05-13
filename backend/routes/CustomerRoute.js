@@ -363,7 +363,7 @@ router.get("/getjobcards/:vehicleno", authenticateToken, authorizeRoles(["Custom
             // Step 2: Get appointments related to this vehicle
             const appointmentQuery = `
                 SELECT AppointmentID FROM Appointments
-                WHERE VehicleID = ?
+                WHERE VehicleID = ? AND Status != 'Cancelled'
             `;
 
             db.query(appointmentQuery, [vehicleNo], (apptErr, appointments) => {
@@ -600,7 +600,8 @@ router.get("/get-notfinished-jobcards", authenticateToken, async (req, res) => {
             FROM JobCards jc
             JOIN Appointments a ON jc.AppointmentID = a.AppointmentID
             JOIN Vehicles v ON a.VehicleID = v.VehicleNo
-            WHERE a.CustomerID = ? AND jc.Status != 'Finished'
+            WHERE a.CustomerID = ? AND jc.Status NOT IN ('Invoice Generated', 'Finished')
+
             ORDER BY jc.JobCardID DESC
         `;
         
@@ -1238,154 +1239,322 @@ router.post("/update-mechanic-rating", authenticateToken, authorizeRoles(["Custo
     }
 });
 
-router.post("/initiate-payhere-payment/:InvoiceID", authenticateToken, authorizeRoles(['Customer']), async (req, res) => {
-    try {
-      const { InvoiceID } = req.params;
-      const customerId = req.user.customerId;
-      
-      // Fetch invoice details with proper joins
-      const invoiceQuery = `
-  SELECT i.*, c.FirstName, c.SecondName, c.Email, c.Telephone
-  FROM Invoice i
-  JOIN JobCards j ON i.JobCard_ID = j.JobCardID
-  JOIN Appointments a ON j.AppointmentID = a.AppointmentID
-  JOIN Customers c ON a.CustomerID = c.CustomerID
-  WHERE i.Invoice_ID = ? AND c.CustomerID = ?
-`;
-      
-      db.query(invoiceQuery, [InvoiceID, customerId], (err, results) => {
-        if (err) {
-          console.error("Database error:", err);
-          return res.status(500).json({
-            success: false,
-            message: "Failed to fetch invoice details",
-            error: err.message
-          });
-        }
-        
-        if (results.length === 0) {
-          return res.status(404).json({
-            success: false,
-            message: "Invoice not found or does not belong to this customer"
-          });
-        }
-        
-        const invoice = results[0];
-        
-        // Get merchant details from environment variables
-        const merchantSecret = process.env.PAYHERE_MERCHANT_SECRET;
-        const merchantId = process.env.PAYHERE_MERCHANT_ID;
-        
-        // Create return URLs that are optimized for webview detection
-        // Using URL scheme that can be intercepted in the WebView
-        const returnUrl = "app://payment/success";
-        const cancelUrl = "app://payment/cancel";
-        
-        const hashedData = generatePayHereHash(merchantId, InvoiceID, invoice.Total, 'LKR', merchantSecret);
-        
-        // Return payment initialization data with default values for missing fields
-        return res.status(200).json({
-          success: true,
-          paymentData: {
-            merchant_id: merchantId,
-            return_url: returnUrl,
-            cancel_url: cancelUrl,
-            notify_url: `${process.env.BACKEND_URL}/api/customers/payhere-notify`,
-            order_id: InvoiceID,
-            items: `Invoice Payment - ${InvoiceID}`,
-            currency: 'LKR',
-            amount: invoice.Total,
-            first_name: invoice.FirstName,
-            last_name: invoice.SecondName,
-            email: invoice.Email,
-            phone: invoice.Telephone,
-            address: "N/A", // Default value
-            city: "Colombo", // Default value
-            country: "Sri Lanka", // Default value
-            hash: hashedData
-          }
-        });
-      });
-      
-    } catch (error) {
-      console.error("Error initiating PayHere payment:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Failed to initiate payment",
-        error: error.message
-      });
-    }
-});
-  
-  // Helper function to generate PayHere hash
-  function generatePayHereHash(merchantId, orderId, amount, currency, merchantSecret) {
-    const crypto = require('crypto');
-    // Ensure proper string formatting and no extra spaces
-    const dataString = `${merchantId}${orderId}${amount}${currency}${merchantSecret}`;
-    return crypto.createHash('md5').update(dataString).digest('hex').toUpperCase();
-  }
-  
 
   
-  router.post("/payhere-notify", async (req, res) => {
-    try {
-      // Extract payment details from the request body
-      const {
-        merchant_id,
-        order_id,
-        payment_id,
-        payhere_amount,
-        payhere_currency,
-        status_code,
-        md5sig
-      } = req.body;
+  // Helper function to generate PayHere hash
+// Updated PayHere hash generation function
+function generatePayHereHash(merchantId, orderId, amount, currency, merchantSecret) {
+  const crypto = require('crypto');
   
-      console.log("PayHere Notification Received:", req.body);
+  try {
+    // Ensure all values are properly formatted and converted to strings
+    merchantId = String(merchantId).trim();
+    orderId = String(orderId).trim();
+    amount = String(amount).trim();
+    currency = String(currency).trim();
+    merchantSecret = String(merchantSecret).trim();
+    
+    // First, hash the merchant secret and convert to uppercase
+    const hashedSecret = crypto
+      .createHash('md5')
+      .update(merchantSecret)
+      .digest('hex')
+      .toUpperCase();
+    
+    // Create the data string with the hashed secret
+    const dataString = `${merchantId}${orderId}${amount}${currency}${hashedSecret}`;
+    
+    // Generate the final MD5 hash and convert to uppercase
+    const finalHash = crypto
+      .createHash('md5')
+      .update(dataString)
+      .digest('hex')
+      .toUpperCase();
       
-      // Verify the MD5 signature
-      const merchantSecret = "MTUwMTI0MDQ5OTEwNTg3NDIyMzMDIyNzUzMD"; // Your merchant secret
-      const expectedSig = generatePayHereHash(merchant_id, order_id, payhere_amount, payhere_currency, merchantSecret);
-      
-      if (md5sig !== expectedSig) {
-        console.error("Invalid MD5 signature");
-        return res.status(400).json({ error: "Invalid signature" });
+    return finalHash;
+  } catch (error) {
+    console.error("Error in hash generation:", error);
+    throw new Error(`Hash generation failed: ${error.message}`);
+  }
+}
+
+// API endpoint for initiating PayHere payment
+router.post("/initiate-payhere-payment/:InvoiceID", authenticateToken, authorizeRoles(['Customer']), async (req, res) => {
+  try {
+    const { InvoiceID } = req.params;
+    const customerId = req.user.customerId;
+    
+    // Fetch invoice details with proper joins
+    const invoiceQuery = `
+      SELECT i.*, c.FirstName, c.SecondName, c.Email, c.Telephone
+      FROM Invoice i
+      JOIN JobCards j ON i.JobCard_ID = j.JobCardID
+      JOIN Appointments a ON j.AppointmentID = a.AppointmentID
+      JOIN Customers c ON a.CustomerID = c.CustomerID
+      WHERE i.Invoice_ID = ? AND c.CustomerID = ?
+    `;
+    
+    db.query(invoiceQuery, [InvoiceID, customerId], (err, results) => {
+      if (err) {
+        return res.status(500).json({
+          success: false,
+          message: "Failed to fetch invoice details",
+          error: err.message
+        });
       }
       
-      // Check payment status
-      if (status_code === "2") { // 2 means payment success
-        // Update invoice status
-        const updateQuery = `
-          UPDATE Invoice 
-          SET PaymentMethod = 'PayHere',
-              PaymentDate = CURRENT_TIMESTAMP,
-              PaymentReference = ?
-          WHERE Invoice_ID = ?
+      if (results.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Invoice not found or does not belong to this customer"
+        });
+      }
+      
+      const invoice = results[0];
+      
+      // Get merchant details from environment variables
+      const merchantSecret = process.env.PAYHERE_MERCHANT_SECRET;
+      const merchantId = process.env.PAYHERE_MERCHANT_ID;
+      
+      // Format amount to avoid decimal precision issues (ensure 2 decimal places)
+      const formattedAmount = parseFloat(invoice.Total).toFixed(2);
+      
+      // Create return URLs with protocol that can be intercepted by app
+      const returnUrl = "app://payment/success";
+      const cancelUrl = "app://payment/cancel";
+      const notifyUrl = `${process.env.BACKEND_URL}/api/customers/payhere-notify`;
+      
+      // Generate PayHere hash
+      const hashedData = generatePayHereHash(merchantId, InvoiceID, formattedAmount, 'LKR', merchantSecret);
+      
+      // Create payment data object
+      const paymentData = {
+        merchant_id: merchantId,
+        return_url: returnUrl,
+        cancel_url: cancelUrl,
+        notify_url: notifyUrl,
+        order_id: InvoiceID,
+        items: `Invoice Payment - ${InvoiceID}`,
+        currency: 'LKR',
+        amount: formattedAmount,
+        first_name: invoice.FirstName || "Customer",
+        last_name: invoice.SecondName || "",
+        email: invoice.Email || "customer@example.com",
+        phone: invoice.Telephone || "0000000000",
+        address: "N/A", // Default value
+        city: "Colombo", // Default value
+        country: "Sri Lanka", // Default value
+        hash: hashedData
+      };
+      
+      // Return payment initialization data
+      return res.status(200).json({
+        success: true,
+        paymentData
+      });
+    });
+    
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to initiate payment",
+      error: error.message
+    });
+  }
+});
+
+// Add this new route to your backend
+router.put("/update-payment-status/:InvoiceID", authenticateToken, authorizeRoles(['Customer']), async (req, res) => {
+  try {
+    const { InvoiceID } = req.params;
+    const { paymentId, paymentMethod, status } = req.body;
+    const customerId = req.user.customerId;
+    
+    // Verify that the invoice belongs to this customer
+    const verifyQuery = `
+      SELECT i.Invoice_ID
+      FROM Invoice i
+      JOIN JobCards j ON i.JobCard_ID = j.JobCardID
+      JOIN Appointments a ON j.AppointmentID = a.AppointmentID
+      JOIN Customers c ON a.CustomerID = c.CustomerID
+      WHERE i.Invoice_ID = ? AND c.CustomerID = ?
+    `;
+    
+    db.query(verifyQuery, [InvoiceID, customerId], (err, results) => {
+      if (err) {
+        return res.status(500).json({
+          success: false,
+          message: "Failed to verify invoice ownership",
+          error: err.message
+        });
+      }
+      
+      if (results.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Invoice not found or does not belong to this customer"
+        });
+      }
+      
+      // Update the invoice in the database
+      const updateQuery = `
+        UPDATE Invoice 
+        SET 
+          PaidStatus = ?,
+          PaymentMethod = ?,
+          PaymentDate = NOW(),
+          Notes = CONCAT(IFNULL(Notes, ''), ' PayHere Payment ID: ${paymentId}')
+        WHERE 
+          Invoice_ID = ?
+      `;
+      
+      db.query(updateQuery, [status, paymentMethod, InvoiceID], (updateErr, updateResult) => {
+        if (updateErr) {
+          return res.status(500).json({
+            success: false,
+            message: "Failed to update payment status",
+            error: updateErr.message
+          });
+        }
+        
+        if (updateResult.affectedRows === 0) {
+          return res.status(404).json({
+            success: false,
+            message: "No invoice found with the provided ID"
+          });
+        }
+        
+        // Also update the JobCard status
+        const updateJobCardQuery = `
+          UPDATE JobCards 
+          SET Status = 'Finished' 
+          WHERE JobCardID = (
+            SELECT JobCard_ID FROM Invoice WHERE Invoice_ID = ?
+          )
         `;
         
-        db.query(updateQuery, [payment_id, order_id], (err, result) => {
-          if (err) {
-            console.error("Database error:", err);
-            return res.status(500).json({ error: "Database error" });
+        db.query(updateJobCardQuery, [InvoiceID], (jobCardErr) => {
+          if (jobCardErr) {
+            console.error("Failed to update job card:", jobCardErr);
           }
           
-          if (result.affectedRows === 0) {
-            console.error("Invoice not found:", order_id);
-            return res.status(404).json({ error: "Invoice not found" });
-          }
-          
-          // Return success response
-          return res.status(200).json({ status: "Success" });
+          return res.status(200).json({
+            success: true,
+            message: "Payment status updated successfully"
+          });
         });
-      } else {
-        console.log("Payment not successful. Status code:", status_code);
-        return res.status(200).json({ status: "Noted" });
-      }
-      
-    } catch (error) {
-      console.error("Error processing PayHere notification:", error);
-      return res.status(500).json({ error: "Server error" });
+      });
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update payment status",
+      error: error.message
+    });
+  }
+});
+
+// PayHere notification endpoint
+router.post("/payhere-notify", async (req, res) => {
+  try {
+    console.log("PayHere Notification Received:", JSON.stringify(req.body, null, 2));
+    
+    // Extract payment details from the request body
+    const {
+      merchant_id,
+      order_id,
+      payment_id,
+      payhere_amount,
+      payhere_currency,
+      status_code,
+      md5sig
+    } = req.body;
+
+    if (!merchant_id || !order_id || !payhere_amount || !payhere_currency || !status_code || !md5sig) {
+      console.error("Missing required fields in PayHere notification");
+      return res.status(400).json({ error: "Missing required fields" });
     }
-  });
+    
+    // Get merchant secret from environment
+    const merchantSecret = process.env.PAYHERE_MERCHANT_SECRET;
+    
+    // Verify the MD5 signature
+    const formattedAmount = parseFloat(payhere_amount).toFixed(2);
+    
+    // Generate local MD5 signature for verification
+    const local_md5sig = generatePayHereHash(
+      merchant_id,
+      order_id,
+      formattedAmount,
+      payhere_currency,
+      status_code,
+      merchantSecret
+    );
+    
+    // Verify signature
+    if (md5sig !== local_md5sig) {
+      console.error("Invalid MD5 signature");
+      return res.status(400).json({ error: "Invalid signature" });
+    }
+    
+    // Check if payment is successful (status_code 2 means success)
+    if (status_code == 2) {
+      // Update the invoice in the database
+      const updateQuery = `
+        UPDATE Invoice 
+        SET 
+          PaidStatus = 'Paid',
+          PaymentMethod = 'PayHere',
+          PaymentDate = NOW(),
+          Notes = CONCAT(IFNULL(Notes, ''), ' PayHere Payment ID: ${payment_id}')
+        WHERE 
+          Invoice_ID = ?
+      `;
+      
+      db.query(updateQuery, [order_id], (err, result) => {
+        if (err) {
+          console.error("Failed to update invoice:", err);
+          return res.status(500).json({ error: "Database update failed" });
+        }
+        
+        if (result.affectedRows === 0) {
+          console.error("No invoice found with ID:", order_id);
+          return res.status(404).json({ error: "Invoice not found" });
+        }
+        
+        console.log(`Successfully updated invoice ${order_id} as paid`);
+        
+        // Also update the JobCard status if needed
+        const updateJobCardQuery = `
+          UPDATE JobCards 
+          SET Status = 'Finished' 
+          WHERE JobCardID = (
+            SELECT JobCard_ID FROM Invoice WHERE Invoice_ID = ?
+          )
+        `;
+        
+        db.query(updateJobCardQuery, [order_id], (jobCardErr) => {
+          if (jobCardErr) {
+            console.error("Failed to update job card:", jobCardErr);
+          }
+          
+          // Return success response to PayHere
+          return res.status(200).json({ status: "success" });
+        });
+      });
+    } else {
+      // Payment failed or is pending
+      console.log(`Payment not successful. Status code: ${status_code}`);
+      return res.status(200).json({ status: "noted" });
+    }
+  } catch (error) {
+    console.error("Error processing PayHere notification:", error);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+
+
 
   router.get("/paid-invoices", authenticateToken, async (req, res) => {
     try {

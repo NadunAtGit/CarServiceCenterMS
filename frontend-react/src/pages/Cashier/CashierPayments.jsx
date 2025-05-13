@@ -9,55 +9,59 @@ const CashierPayments = () => {
   const [loading, setLoading] = useState(true);
   const [invoiceLoading, setInvoiceLoading] = useState(true);
 
-  // Fetch finished job cards on mount
-  useEffect(() => {
-    const fetchJobCards = async () => {
-      setLoading(true);
-      try {
-        const res = await axiosInstance.get('/api/advisor/finished-jobcards');
-        if (res.data.success) {
-          setJobCards(res.data.jobCards || []);
-        } else {
-          setJobCards([]);
-        }
-      } catch (err) {
+  // Fetch finished job cards
+  const fetchJobCards = async () => {
+    setLoading(true);
+    try {
+      const res = await axiosInstance.get('/api/advisor/finished-jobcards');
+      if (res.data.success) {
+        setJobCards(res.data.jobCards || []);
+      } else {
         setJobCards([]);
-      } finally {
-        setLoading(false);
       }
-    };
-    
-    const fetchPendingInvoices = async () => {
-      setInvoiceLoading(true);
-      try {
-        const res = await axiosInstance.get('/api/cashier/pending-invoices');
-        if (res.data.success) {
-          setPendingInvoices(res.data.data || []);
-        } else {
-          setPendingInvoices([]);
-        }
-      } catch (err) {
-        console.error("Error fetching pending invoices:", err);
+    } catch (err) {
+      console.error("Error fetching job cards:", err);
+      setJobCards([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Fetch pending invoices
+  const fetchPendingInvoices = async () => {
+    setInvoiceLoading(true);
+    try {
+      const res = await axiosInstance.get('/api/cashier/pending-invoices');
+      if (res.data.success) {
+        setPendingInvoices(res.data.data || []);
+      } else {
         setPendingInvoices([]);
-      } finally {
-        setInvoiceLoading(false);
       }
-    };
-    
+    } catch (err) {
+      console.error("Error fetching pending invoices:", err);
+      setPendingInvoices([]);
+    } finally {
+      setInvoiceLoading(false);
+    }
+  };
+
+  // Initial data fetch on component mount
+  useEffect(() => {
     fetchJobCards();
     fetchPendingInvoices();
   }, []);
 
-  const handlePaymentProcessed = async () => {
-    // Refresh the pending invoices list after payment
-    try {
-      const res = await axiosInstance.get('/api/customers/pending-invoices');
-      if (res.data.success) {
-        setPendingInvoices(res.data.data || []);
-      }
-    } catch (err) {
-      console.error("Error refreshing pending invoices:", err);
-    }
+  // Handle invoice creation
+  const handleInvoiceCreated = async (jobCardId) => {
+    // Refresh both job cards and pending invoices
+    await fetchJobCards();
+    await fetchPendingInvoices();
+  };
+
+  // Handle payment processing
+  const handlePaymentProcessed = async (invoiceId) => {
+    // Refresh pending invoices after payment
+    await fetchPendingInvoices();
   };
 
   return (
@@ -72,7 +76,11 @@ const CashierPayments = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           {jobCards.map(card => (
-            <CreateInvoiceCard key={card.JobCardID} jobCard={card} />
+            <CreateInvoiceCard 
+              key={card.JobCardID} 
+              jobCard={card} 
+              onInvoiceCreated={() => handleInvoiceCreated(card.JobCardID)}
+            />
           ))}
         </div>
       )}
@@ -88,7 +96,7 @@ const CashierPayments = () => {
             <InvoiceCard 
               key={invoice.Invoice_ID} 
               invoice={invoice} 
-              onPaymentProcessed={handlePaymentProcessed}
+              onPaymentProcessed={() => handlePaymentProcessed(invoice.Invoice_ID)}
             />
           ))}
         </div>

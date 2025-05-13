@@ -33,7 +33,6 @@ const CashierOrders = () => {
         const transformedOrders = response.data.orders.map(order => ({
           ...order,
           // Add any necessary transformations here
-          // For example, if your OrderCarousel expects Services instead of Parts:
           Services: [{
             ServiceRecordID: order.Parts[0]?.ServiceRecordID || null,
             Parts: order.Parts
@@ -73,36 +72,14 @@ const CashierOrders = () => {
     }
   };
 
-  const handleApproveOrder = async (orderId) => {
-    try {
-      const response = await axiosInstance.put(`api/cashier/approve-order/${orderId}`);
-      
-      if (response.data.success) {
-        setPendingApprovalOrders(pendingApprovalOrders.filter(order => order.OrderID !== orderId));
-        fetchOrders();
-      } else {
-        alert('Failed to approve order: ' + response.data.message);
-      }
-    } catch (error) {
-      console.error('Error approving order:', error);
-      alert('Error approving order');
-    }
-  };
-
-  const handleRejectOrder = async (orderId) => {
-    try {
-      const response = await axiosInstance.put(`api/cashier/reject-order/${orderId}`);
-      
-      if (response.data.success) {
-        setPendingApprovalOrders(pendingApprovalOrders.filter(order => order.OrderID !== orderId));
-        fetchOrders();
-      } else {
-        alert('Failed to reject order: ' + response.data.message);
-      }
-    } catch (error) {
-      console.error('Error rejecting order:', error);
-      alert('Error rejecting order');
-    }
+  const handleOrderProcessed = (orderId, action) => {
+    // Remove the processed order from the pending approvals list
+    setPendingApprovalOrders(prev => 
+      prev.filter(order => order.OrderID !== orderId)
+    );
+    
+    // Refresh the main orders list to show the updated status
+    fetchOrders();
   };
 
   const deleteOrder = async (orderId) => {
@@ -145,9 +122,9 @@ const CashierOrders = () => {
           ) : (
             <OrderCarousel 
               orders={pendingApprovalOrders} 
-              onApprove={handleApproveOrder} 
-              onReject={handleRejectOrder}
-              showJobCard={true} // Add this prop if you want to show JobCardID
+              onApprove={handleOrderProcessed} 
+              onReject={handleOrderProcessed}
+              showJobCard={true}
             />
           )}
         </div>

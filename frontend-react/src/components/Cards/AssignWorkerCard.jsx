@@ -3,12 +3,19 @@ import { FaClipboardList, FaTools, FaCheckCircle, FaUserPlus } from "react-icons
 import Modal from "react-modal";
 import AssignWorkersModal from "../Modals/AssignWorkersModal";
 
-const AssignWorkerCard = ({ job, onAssign }) => {
+const AssignWorkerCard = ({ job, onAssignSuccess }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
   const openModal = () => setIsModalOpen(true);
   const closeModal = () => setIsModalOpen(false);
+
+  // Handle successful assignment
+  const handleAssignSuccess = (jobCardId) => {
+    if (onAssignSuccess) {
+      onAssignSuccess(jobCardId);
+    }
+  };
 
   return (
     <div className="bg-gradient-to-br from-white/80 via-white/60 to-white/80 shadow-lg rounded-2xl p-5 border border-[#944EF8]/20 w-full max-w-sm mx-auto backdrop-blur-xl transition-all transform hover:scale-105">
@@ -53,7 +60,11 @@ const AssignWorkerCard = ({ job, onAssign }) => {
           overlay: { backgroundColor: "rgba(0,0,0,0.2)", zIndex: 999 },
         }}
       >
-        <AssignWorkersModal jobCardId={job.JobCardID} onClose={closeModal} />
+        <AssignWorkersModal 
+          jobCardId={job.JobCardID} 
+          onClose={closeModal} 
+          onAssignSuccess={handleAssignSuccess}
+        />
       </Modal>
     </div>
   );

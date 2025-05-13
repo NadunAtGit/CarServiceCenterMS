@@ -26,10 +26,15 @@ const TeamLeaderAssign = () => {
     fetchNotAssigned();
   }, []);
 
+  // Handle successful assignment - remove the job card from the list
+  const handleAssignSuccess = (jobCardId) => {
+    setJobCards(prevJobCards => prevJobCards.filter(job => job.JobCardID !== jobCardId));
+  };
+
   return (
     <div className="mx-auto px-4">
       <div className="w-full flex flex-col">
-        <h1 className="text-xl font-bold mb-5 text-left">Not Job Cards to Assign</h1>
+        <h1 className="text-xl font-bold mb-5 text-left">Job Cards to Assign</h1>
 
         {isLoading ? (
           <p className="text-center">Loading job cards...</p>
@@ -39,7 +44,7 @@ const TeamLeaderAssign = () => {
               <AssignWorkerCard
                 key={job.JobCardID}
                 job={job}
-                onAssign={(job) => console.log("Assigning", job)}
+                onAssignSuccess={handleAssignSuccess}
               />
             ))}
           </div>

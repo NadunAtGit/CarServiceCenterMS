@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axiosInstance from "../../utils/AxiosInstance";
 import { FiUser, FiCheck, FiX } from "react-icons/fi";
 
-const AssignWorkersModal = ({ onClose, jobCardId }) => {
+const AssignWorkersModal = ({ onClose, jobCardId, onAssignSuccess }) => {
   const [mechanics, setMechanics] = useState([]);
   const [selectedMechanics, setSelectedMechanics] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -55,6 +55,8 @@ const AssignWorkersModal = ({ onClose, jobCardId }) => {
       if (response.data.success) {
         // Use a toast notification in your production code
         alert(response.data.message);
+        // Call the onAssignSuccess callback to notify parent component
+        onAssignSuccess(jobCardId);
         onClose();
       } else {
         alert(response.data.message);
@@ -72,7 +74,7 @@ const AssignWorkersModal = ({ onClose, jobCardId }) => {
       <div className="bg-white/70 backdrop-blur-xl rounded-xl border border-[#944EF8]/10 p-6 shadow-lg w-full max-w-xl transition-all duration-300 transform">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-semibold text-gray-800">Assign Mechanics to Job Card</h2>
-          <button 
+          <button
             onClick={onClose}
             className="p-2 rounded-full hover:bg-[#944EF8]/10 transition-colors"
           >
@@ -95,20 +97,20 @@ const AssignWorkersModal = ({ onClose, jobCardId }) => {
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {mechanics.map((mechanic) => (
-                    <div 
-                      key={mechanic.EmployeeID} 
+                    <div
+                      key={mechanic.EmployeeID}
                       className={`flex items-center p-3 rounded-lg cursor-pointer border transition-all duration-200 ${
-                        selectedMechanics.includes(mechanic.EmployeeID) 
-                          ? 'border-[#944EF8] bg-[#944EF8]/10' 
+                        selectedMechanics.includes(mechanic.EmployeeID)
+                          ? 'border-[#944EF8] bg-[#944EF8]/10'
                           : 'border-gray-200 hover:border-[#944EF8]/50'
                       }`}
                       onClick={() => handleSelectionChange(mechanic.EmployeeID)}
                     >
                       <div className="relative mr-3">
                         {mechanic.ProfilePicUrl ? (
-                          <img 
-                            src={mechanic.ProfilePicUrl} 
-                            alt={mechanic.Name} 
+                          <img
+                            src={mechanic.ProfilePicUrl}
+                            alt={mechanic.Name}
                             className="w-12 h-12 rounded-full object-cover border-2 border-[#944EF8]/20"
                           />
                         ) : (
@@ -116,7 +118,7 @@ const AssignWorkersModal = ({ onClose, jobCardId }) => {
                             <FiUser size={20} />
                           </div>
                         )}
-                        
+
                         {selectedMechanics.includes(mechanic.EmployeeID) && (
                           <div className="absolute -top-1 -right-1 bg-[#944EF8] rounded-full w-5 h-5 flex items-center justify-center">
                             <FiCheck size={12} className="text-white" />
@@ -143,10 +145,10 @@ const AssignWorkersModal = ({ onClose, jobCardId }) => {
               <button
                 onClick={handleAssign}
                 disabled={isLoading || selectedMechanics.length === 0}
-                className={`px-6 py-2 rounded-lg bg-[#944EF8] text-white font-medium 
-                  ${(isLoading || selectedMechanics.length === 0) 
-                    ? 'opacity-50 cursor-not-allowed' 
-                    : 'hover:bg-[#7a3fd0] transition-colors'}`}
+                className={`px-6 py-2 rounded-lg bg-[#944EF8] text-white font-medium
+                ${(isLoading || selectedMechanics.length === 0)
+                  ? 'opacity-50 cursor-not-allowed'
+                  : 'hover:bg-[#7a3fd0] transition-colors'}`}
               >
                 Assign Selected ({selectedMechanics.length})
               </button>

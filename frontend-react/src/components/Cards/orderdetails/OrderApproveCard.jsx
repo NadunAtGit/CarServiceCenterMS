@@ -4,7 +4,7 @@ import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import axiosInstance from '../../../utils/axiosInstance';
 
-const OrderApproveCard = ({ order, onOrderProcessed }) => {
+const OrderApproveCard = ({ order, onOrderProcessed, showJobCard }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [availabilityChecks, setAvailabilityChecks] = useState({});
 
@@ -28,7 +28,7 @@ const OrderApproveCard = ({ order, onOrderProcessed }) => {
       // Show success toast with details from the response
       toast.success(`Order ${order.OrderID} approved and fulfilled using FIFO method`);
       
-      // Notify parent component if needed
+      // Notify parent component that this order has been processed
       if (onOrderProcessed) {
         onOrderProcessed(order.OrderID, 'approved');
       }
@@ -60,7 +60,7 @@ const OrderApproveCard = ({ order, onOrderProcessed }) => {
       
       toast.info(`Order ${order.OrderID} rejected`);
       
-      // Notify parent component if needed
+      // Notify parent component that this order has been processed
       if (onOrderProcessed) {
         onOrderProcessed(order.OrderID, 'rejected');
       }
@@ -119,7 +119,7 @@ const OrderApproveCard = ({ order, onOrderProcessed }) => {
       </div>
 
       <div className="space-y-4">
-        {order.Services.map((service) => (
+        {order.Services && order.Services.map((service) => (
           <PartsServiceCard 
             key={service.ServiceRecordID} 
             service={service} 

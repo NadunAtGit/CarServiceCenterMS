@@ -137,7 +137,8 @@ if (recentTransactionsResponse.data.success && recentTransactionsResponse.data.r
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-500 text-sm">Today's Sales</p>
-                  <h3 className="text-xl font-bold text-gray-800">${dashboardData.todaySales.toFixed(2)}</h3>
+                  <h3 className="text-xl font-bold text-gray-800">${parseFloat(dashboardData.todaySales).toFixed(2)}</h3>
+
                   <div className="flex items-center mt-1">
                     <AiOutlineRise className="text-green-500" />
                     <span className="text-green-500 text-xs ml-1">+12.5% from yesterday</span>

@@ -5,6 +5,7 @@ const InvoiceCard = ({ invoice, onPaymentProcessed }) => {
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [isPaid, setIsPaid] = useState(invoice.PaidStatus === 'Paid');
 
   const handlePayment = async () => {
     setProcessing(true);
@@ -16,6 +17,9 @@ const InvoiceCard = ({ invoice, onPaymentProcessed }) => {
       
       if (response.data.success) {
         setSuccess('Payment processed successfully');
+        setIsPaid(true);
+        
+        // Call the callback function after successful payment processing
         if (onPaymentProcessed) {
           setTimeout(() => {
             onPaymentProcessed();
@@ -52,8 +56,10 @@ const InvoiceCard = ({ invoice, onPaymentProcessed }) => {
           <div className="font-bold text-lg">{invoice.Invoice_ID}</div>
           <div className="text-sm text-gray-600">Job Card: {invoice.JobCardID}</div>
         </div>
-        <div className="px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-          {invoice.PaidStatus}
+        <div className={`px-3 py-1 rounded-full text-xs font-medium ${
+          isPaid ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+        }`}>
+          {isPaid ? 'Paid' : invoice.PaidStatus}
         </div>
       </div>
       
@@ -82,13 +88,20 @@ const InvoiceCard = ({ invoice, onPaymentProcessed }) => {
           <div className="font-bold">
             Total: <span className="font-mono">Rs. {Number(invoice.Total).toFixed(2)}</span>
           </div>
-          <button
-            className="bg-[#944EF8] text-white px-4 py-2 rounded-lg hover:bg-[#7a3ee6] transition disabled:opacity-50"
-            onClick={handlePayment}
-            disabled={processing}
-          >
-            {processing ? 'Processing...' : 'Mark as Paid'}
-          </button>
+          {!isPaid && (
+            <button
+              className="bg-[#944EF8] text-white px-4 py-2 rounded-lg hover:bg-[#7a3ee6] transition disabled:opacity-50"
+              onClick={handlePayment}
+              disabled={processing}
+            >
+              {processing ? 'Processing...' : 'Mark as Paid'}
+            </button>
+          )}
+          {isPaid && (
+            <span className="bg-green-100 text-green-800 px-4 py-2 rounded-lg font-medium">
+              Paid
+            </span>
+          )}
         </div>
       </div>
       

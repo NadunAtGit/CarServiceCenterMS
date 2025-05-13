@@ -72,7 +72,7 @@ const CreateJobCard = ({ appointment, recallCarousel, recallTable, onCreateJobCa
       {/* Footer with create job card button */}
       <div className="bg-gray-50 p-3 border-t border-gray-100">
         <button
-          onClick={onCreateJobCard}
+          onClick={() => onCreateJobCard(appointment)}
           className="w-full bg-[#944EF8] hover:bg-[#7a3dd0] text-white py-2 rounded-md transition-colors flex items-center justify-center gap-2"
         >
           <FiPlus size={18} />

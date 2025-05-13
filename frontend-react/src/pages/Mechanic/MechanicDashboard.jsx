@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import JobCardStatusCard from '../../components/Cards/JobCardStatusCard';
 import { FiTool, FiAlertCircle, FiClock, FiRefreshCw } from 'react-icons/fi';
-import axiosInstance from '../../utils/axiosInstance'; // Adjust the import path as necessary
+import axiosInstance from "../../utils/AxiosInstance" // Adjust the import path as necessary
 
 const MechanicDashboard = () => {
   const [assignedJobCards, setAssignedJobCards] = useState([]);

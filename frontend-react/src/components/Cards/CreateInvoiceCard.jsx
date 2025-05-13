@@ -40,9 +40,9 @@ const CreateInvoiceCard = ({ jobCard, onInvoiceCreated }) => {
         <button
           className="bg-[#944EF8] text-white px-4 py-1 rounded-lg hover:bg-[#7a3ee6] transition"
           onClick={handleCreateInvoice}
-          disabled={creating}
+          disabled={creating || invoice}
         >
-          {creating ? 'Creating...' : 'Create Invoice'}
+          {creating ? 'Creating...' : invoice ? 'Created' : 'Create Invoice'}
         </button>
       </div>
       <div className="mt-2 text-gray-700">

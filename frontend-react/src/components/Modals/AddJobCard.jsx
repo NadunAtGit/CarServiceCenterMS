@@ -1,3 +1,4 @@
+// 2. Now, let's update the AddJobCard.jsx component
 import React, { useState } from "react";
 import { MdClose } from "react-icons/md";
 import axiosInstance from "../../utils/AxiosInstance";
@@ -6,7 +7,7 @@ import "react-toastify/dist/ReactToastify.css";
 import { CircularProgress } from "@mui/material";
 import ServicesDropdown from "../INPUTS/ServicesDropdown";
 
-const AddJobCard = ({ onClose, getJobCards, appointmentId, getAppointments, recallCarousel }) => {
+const AddJobCard = ({ onClose, getJobCards, appointmentId, getAppointments, recallCarousel, onSuccessCallback }) => {
   const [serviceDetails, setServiceDetails] = useState("");
   const [type, setType] = useState("");
   const [serviceRecords, setServiceRecords] = useState([{ Description: "", ServiceType: "", ServiceID: "" }]);
@@ -97,8 +98,9 @@ const AddJobCard = ({ onClose, getJobCards, appointmentId, getAppointments, reca
         
         // Call all callback functions to refresh data
         if (typeof getJobCards === 'function') getJobCards();
-        if (typeof getAppointments === 'function') getAppointments();
-        if (typeof recallCarousel === 'function') recallCarousel();
+        
+        // Call the onSuccessCallback with the appointmentId to remove it from the parent's state
+        if (typeof onSuccessCallback === 'function') onSuccessCallback(appointmentId);
         
         // Close the modal after a short delay to allow the success toast to be seen
         setTimeout(() => {
@@ -209,7 +211,7 @@ const AddJobCard = ({ onClose, getJobCards, appointmentId, getAppointments, reca
         </div>
 
         <button
-          className="bg-purple-400  text-white py-3 px-6 rounded-lg hover:bg-d9baf4 transition-colors mt-4 flex items-center justify-center text-purple-400"
+          className="bg-purple-400 text-white py-3 px-6 rounded-lg hover:bg-d9baf4 transition-colors mt-4 flex items-center justify-center"
           onClick={handleSubmit}
           disabled={loading}
         >

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { FiSearch, FiRefreshCcw, FiPlus } from "react-icons/fi";
 import { AiOutlineInfoCircle, AiOutlineDelete } from "react-icons/ai";
@@ -62,6 +63,23 @@ const ServiceAdvisorJobCards = () => {
     getTodayAppointments();
     Modal.setAppElement('#root');
   }, []);
+
+  // Handler for successful job card creation
+  const handleJobCardCreationSuccess = (appointmentId) => {
+    // Remove the appointment from today's appointments
+    setTodayAppointments(prevAppointments => 
+      prevAppointments.filter(app => app.AppointmentID !== appointmentId)
+    );
+    
+    // Update selected appointment if it was the one that was just processed
+    if (selectedAppointment && selectedAppointment.AppointmentID === appointmentId) {
+      const remainingAppointments = todayAppointments.filter(app => app.AppointmentID !== appointmentId);
+      setSelectedAppointment(remainingAppointments.length > 0 ? remainingAppointments[0] : null);
+    }
+    
+    // Refresh job cards list
+    getJobCards();
+  };
 
   // Filter job cards based on search query and status filter
   const filteredJobCards = allJobCards.filter(jobCard => {
@@ -157,7 +175,7 @@ const ServiceAdvisorJobCards = () => {
                     appointment={appointment} 
                     recallCarousel={getTodayAppointments} 
                     recallTable={getJobCards} 
-                    onCreateJobCard={() => openAddJobCardModal(appointment)}
+                    onCreateJobCard={openAddJobCardModal}
                   />
                 </div>
               ))}
@@ -328,11 +346,12 @@ const ServiceAdvisorJobCards = () => {
             appointmentId={openAddModal.data?.appointmentId}
             getAppointments={getTodayAppointments}
             recallCarousel={getTodayAppointments}
+            onSuccessCallback={handleJobCardCreationSuccess}
           />
-        </div>
+      </div>
       </Modal>
     </div>
-  );
+);
 };
 
-export default ServiceAdvisorJobCards;
+export default ServiceAdvisorJobCards;    
