@@ -1,7 +1,7 @@
 import axios from "axios";
 import { BASE_URL } from "./Constants";
 
-const axiosInstance=axios.create({
+const AxiosInstance=axios.create({
     baseURL:BASE_URL,
     timeout:20000,
     headers:{
@@ -9,7 +9,7 @@ const axiosInstance=axios.create({
     }
 });
 
-axiosInstance.interceptors.request.use(
+AxiosInstance.interceptors.request.use(
     (config)=>{
         const accessToken=localStorage.getItem("token");
         if(accessToken){
@@ -22,4 +22,4 @@ axiosInstance.interceptors.request.use(
     }
 );
 
-export default axiosInstance;
+export default AxiosInstance;

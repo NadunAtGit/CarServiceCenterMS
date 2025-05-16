@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { FiMenu, FiLogOut } from 'react-icons/fi';
-import { FaUserCircle, FaClipboardList, FaPaperPlane } from 'react-icons/fa';
-import { MdOutlineEventNote } from 'react-icons/md';
+import { FaUserCircle, FaCarCrash, FaHistory, FaPaperPlane } from 'react-icons/fa';
+import { MdDashboard } from 'react-icons/md';
 import UserData from '../../components/UserData';
 import axiosInstance from '../../utils/AxiosInstance';
 import { Link, Outlet, useNavigate } from 'react-router-dom';
 
-const TeamLeaderHome = () => {
+const DriverHome = () => {
   const [isOpen, setIsOpen] = useState(true);
   const [userInfo, setUserInfo] = useState({});
   const [error, setError] = useState(null);
@@ -58,10 +58,10 @@ const TeamLeaderHome = () => {
     navigate("/login");
   };
 
-  // Sidebar Menu Items (Only Assignments & Job Cards)
+  // Sidebar Menu Items for Driver
   const menuItems = [
-    { title: "Assign", icon: <MdOutlineEventNote size={26} />, path: "/teamleader/assign" },
-    { title: "Job Cards", icon: <FaClipboardList size={26} />, path: "/teamleader/jobcards-leader" }
+    { title: "Breakdowns", icon: <FaCarCrash size={26} />, path: "/driver" },
+    
   ];
 
   return (
@@ -70,8 +70,8 @@ const TeamLeaderHome = () => {
         {/* Sidebar */}
         <div
           className={`${
-            isOpen ? 'w-82' : 'w-25'
-          } fixed bg-gradient-to-br from-white/80 via-white/60 to-white/80 min-h-screen h-full p-5 pt-8 relative flex flex-col transition-all duration-200 overflow-hidden backdrop-blur-xl border-r border-[#944EF8]/20 shadow-lg`}
+            isOpen ? 'w-64' : 'w-20'
+          } fixed bg-gradient-to-br from-white/80 via-white/60 to-white/80 min-h-screen h-full p-5 pt-8 relative flex flex-col transition-all duration-200 overflow-hidden backdrop-blur-xl border-r border-[#944EF8]/20 shadow-lg z-10`}
         >
           {/* Sidebar Toggle Button */}
           <FiMenu
@@ -137,10 +137,12 @@ const TeamLeaderHome = () => {
         </div>
 
         {/* Main content */}
-        <div className={`flex-grow p-5 transition-all duration-200 h-screen overflow-y-auto w-full bg-[#D8D8D8]`}>
-          {error && <p className="text-red-500">{error}</p>}
-          <div className="bg-white/70 rounded-2xl p-6 backdrop-blur-xl border border-[#944EF8]/10 shadow-lg">
-            <Outlet />
+        <div className={`flex-1 transition-all duration-200 ${isOpen ? 'ml-14' : 'ml-14'}`}>
+          <div className="h-screen overflow-y-auto p-5 w-full">
+            {error && <p className="text-red-500">{error}</p>}
+            <div className="bg-white/70 rounded-2xl p-6 backdrop-blur-xl border border-[#944EF8]/10 shadow-lg w-full">
+              <Outlet />
+            </div>
           </div>
         </div>
       </div>
@@ -148,4 +150,4 @@ const TeamLeaderHome = () => {
   );
 };
 
-export default TeamLeaderHome;
+export default DriverHome;

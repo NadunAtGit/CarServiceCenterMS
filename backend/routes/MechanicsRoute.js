@@ -736,7 +736,19 @@ router.put("/finish-job/:JobCardID", authenticateToken, authorizeRoles(["Mechani
                                 const serviceMilleage = jobCard.ServiceMilleage || 0;
                                 console.log(`Current service mileage: ${serviceMilleage}`);
                                 
-                                // Calculate next service mileage if not provided
+                                // Validate that nextServiceMileage is greater than current mileage
+                                if (nextServiceMileage && nextServiceMileage <= serviceMilleage) {
+                                    db.rollback(() => {
+                                        console.error(`Invalid next service mileage: ${nextServiceMileage} must be greater than current mileage: ${serviceMilleage}`);
+                                        return res.status(400).json({ 
+                                            success: false, 
+                                            message: `Next service mileage must be greater than current mileage (${serviceMilleage})` 
+                                        });
+                                    });
+                                    return;
+                                }
+                                
+                                // Calculate next service mileage if not provided or use validated input
                                 const nextMileage = nextServiceMileage || (serviceMilleage + 5000);
                                 console.log(`Next service mileage will be set to: ${nextMileage}`);
                                 
@@ -783,17 +795,17 @@ router.put("/finish-job/:JobCardID", authenticateToken, authorizeRoles(["Mechani
     (notification_id, CustomerID, title, message, notification_type, icon_type, color_code, is_read, created_at, navigate_id, metadata)
     VALUES (?, ?, ?, ?, ?, ?, ?, FALSE, CURRENT_TIMESTAMP, ?, ?)`;
                                         
-    db.query(insertNotificationQuery, [
-        notificationID,
-        customerID,
-        notificationTitle,
-        notificationBody,
-        'Job Card Completed',  // notification_type
-        'done_all',            // icon_type
-        '#4CAF50',             // color_code - Green
-        JobCardID,             // navigate_id
-        metadata               // metadata
-    ],  (err, notificationResult) => {
+                                        db.query(insertNotificationQuery, [
+                                            notificationID,
+                                            customerID,
+                                            notificationTitle,
+                                            notificationBody,
+                                            'Job Card Completed',  // notification_type
+                                            'done_all',            // icon_type
+                                            '#4CAF50',             // color_code - Green
+                                            JobCardID,             // navigate_id
+                                            metadata               // metadata
+                                        ],  (err, notificationResult) => {
                                             if (err) {
                                                 console.error("Error inserting notification:", err);
                                                 // Continue with the process even if notification insertion fails
@@ -955,6 +967,7 @@ router.put("/finish-job/:JobCardID", authenticateToken, authorizeRoles(["Mechani
         });
     }
 });
+
 
 router.post("/reports/save", authenticateToken, authorizeRoles(["Admin"]), async (req, res) => {
     const { reportType, startDate, endDate, department, reportData } = req.body;

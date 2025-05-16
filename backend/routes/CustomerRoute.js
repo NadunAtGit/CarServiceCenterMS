@@ -874,6 +874,118 @@ router.get("/pending-invoices", authenticateToken, async (req, res) => {
   }
 });
 
+router.get("/pending-breakdown-invoices", authenticateToken, async (req, res) => {
+  try {
+    const customerId = req.user.customerId; // Assuming the customer ID is stored in the token
+    
+    // Query to get pending invoices from breakdown services
+    const query = `
+      SELECT i.Invoice_ID, i.Total, i.Parts_Cost, i.Labour_Cost, i.GeneratedDate, 
+             i.PaidStatus, i.Notes, br.RequestID, br.Description
+      FROM Invoice i
+      INNER JOIN BreakdownRequests br ON br.InvoiceID = i.Invoice_ID
+      WHERE br.CustomerID = ? AND i.PaidStatus = 'Pending'
+      ORDER BY i.GeneratedDate DESC
+    `;
+    
+    db.query(query, [customerId], (err, results) => {
+      if (err) {
+        console.error("Database error:", err);
+        return res.status(500).json({
+          success: false,
+          message: "Failed to fetch pending breakdown invoices",
+          error: err.message
+        });
+      }
+      
+      return res.status(200).json({
+        success: true,
+        message: results.length > 0 ? "Pending breakdown invoices retrieved successfully" : "No pending breakdown invoices found",
+        count: results.length,
+        data: results
+      });
+    });
+    
+  } catch (error) {
+    console.error("Error fetching pending breakdown invoices:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch pending breakdown invoices",
+      error: error.message
+    });
+  }
+});
+
+router.get("/all-pending-invoices", authenticateToken, async (req, res) => {
+  try {
+    const customerId = req.user.customerId;
+    
+    // Query for regular service invoices
+    const regularInvoicesQuery = `
+      SELECT i.Invoice_ID, i.Total, i.Parts_Cost, i.Labour_Cost, i.GeneratedDate, 
+             i.PaidStatus, j.JobCardID, a.AppointmentID, v.VehicleNo, v.Model,
+             'service' as invoiceType
+      FROM Invoice i
+      INNER JOIN JobCards j ON i.JobCard_ID = j.JobCardID
+      INNER JOIN Appointments a ON j.AppointmentID = a.AppointmentID
+      INNER JOIN Vehicles v ON a.VehicleID = v.VehicleNo
+      WHERE a.CustomerID = ? AND i.PaidStatus = 'Pending'
+    `;
+    
+    // Query for breakdown service invoices
+    const breakdownInvoicesQuery = `
+      SELECT i.Invoice_ID, i.Total, i.Parts_Cost, i.Labour_Cost, i.GeneratedDate, 
+             i.PaidStatus, NULL as JobCardID, NULL as AppointmentID, 
+             NULL as VehicleNo, NULL as Model, br.RequestID, br.Description,
+             'breakdown' as invoiceType
+      FROM Invoice i
+      INNER JOIN BreakdownRequests br ON br.InvoiceID = i.Invoice_ID
+      WHERE br.CustomerID = ? AND i.PaidStatus = 'Pending'
+    `;
+    
+    db.query(regularInvoicesQuery, [customerId], (err1, regularResults) => {
+      if (err1) {
+        console.error("Database error for regular invoices:", err1);
+        return res.status(500).json({
+          success: false,
+          message: "Failed to fetch regular pending invoices",
+          error: err1.message
+        });
+      }
+      
+      db.query(breakdownInvoicesQuery, [customerId], (err2, breakdownResults) => {
+        if (err2) {
+          console.error("Database error for breakdown invoices:", err2);
+          return res.status(500).json({
+            success: false,
+            message: "Failed to fetch breakdown pending invoices",
+            error: err2.message
+          });
+        }
+        
+        // Combine both results
+        const allResults = [...regularResults, ...breakdownResults];
+        
+        return res.status(200).json({
+          success: true,
+          message: allResults.length > 0 ? "Pending invoices retrieved successfully" : "No pending invoices found",
+          count: allResults.length,
+          data: allResults
+        });
+      });
+    });
+    
+  } catch (error) {
+    console.error("Error fetching all pending invoices:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch pending invoices",
+      error: error.message
+    });
+  }
+});
+
+
 router.delete("/cancel-appointment/:AppointmentID", authenticateToken, authorizeRoles(['Customer']), async (req, res) => {
     try {
       const { AppointmentID } = req.params;

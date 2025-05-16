@@ -185,9 +185,15 @@ const AdminReports = () => {
                   <span className="font-medium">{weeklySummary?.transactions || 0}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Total Revenue</span>
-                  <span className="font-medium">${(weeklySummary?.revenue || 0).toLocaleString()}</span>
-                </div>
+  <span>Total Revenue</span>
+  <span className="font-medium">
+    ${typeof weeklySummary?.revenue === 'string' 
+      ? parseFloat(weeklySummary.revenue).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})
+      : (Number(weeklySummary?.revenue || 0)).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+  </span>
+</div>
+
+
                 <div className="flex justify-between">
                   <span>Services</span>
                   <span className="font-medium">{weeklySummary?.services || 0}</span>

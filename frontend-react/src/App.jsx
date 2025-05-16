@@ -17,6 +17,7 @@ import TeamLeaderHome from './pages/TeamLeader/TeamLeaderHome';
 import TeamLeaderAssign from './pages/TeamLeader/TeamLeaderAssign';
 import TeamLeaderJobCards from './pages/TeamLeader/TeamLeaderJobCards';
 
+
 import MechanicHome from './pages/Mechanic/MechanicHome';
 import MechanicDashboard from './pages/Mechanic/MechanicDashboard';
 import MechanicJobcards from './pages/Mechanic/MechanicJobcards';
@@ -29,6 +30,8 @@ import CashierReports from './pages/Cashier/CashierReports';
 import CashierInventory from './pages/Cashier/CashierInventory';
 import CashierServices from './pages/Cashier/CashierServices';
 
+import DriverHome from './pages/Driver/DriverHome';
+import DriverDashboard from './pages/Driver/DriverDashboard';
 
 import {jwtDecode} from 'jwt-decode';
 
@@ -90,7 +93,23 @@ const App = () => {
                 <Route index element={<TeamLeaderJobCards />} />
                 <Route path="assign" element={<TeamLeaderAssign />} />
                 <Route path="jobcards-leader" element={<TeamLeaderJobCards />} />
+                
           </Route>
+
+          // In App.js, update the driver route:
+
+<Route 
+  path='/driver' 
+  element={
+    <PrivateRoute roles={['Driver']}>
+      <DriverHome />
+    </PrivateRoute>
+  }
+>
+  <Route index element={<DriverDashboard />} />
+  
+</Route>
+
 
           <Route 
             path='/mechanic' 

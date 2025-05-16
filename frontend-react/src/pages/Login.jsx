@@ -55,6 +55,9 @@ const Login = () => {
               navigate("/mechanic");
             }else if (userRole === 'Cashier') {
               navigate("/cashier");
+            }else if (userRole === 'Driver') {
+              navigate("/driver");
+              
             }
           }
       } catch (error) {

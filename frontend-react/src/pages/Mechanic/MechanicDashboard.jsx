@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import JobCardStatusCard from '../../components/Cards/JobCardStatusCard';
 import { FiTool, FiAlertCircle, FiClock, FiRefreshCw } from 'react-icons/fi';
-import axiosInstance from "../../utils/AxiosInstance" // Adjust the import path as necessary
+import AxiosInstance from "../../utils/axiosInstance"; // Adjust the import path as necessary 
 
 const MechanicDashboard = () => {
   const [assignedJobCards, setAssignedJobCards] = useState([]);
@@ -17,7 +17,7 @@ const MechanicDashboard = () => {
     setErrorMessage('');
 
     try {
-      const response = await axiosInstance.get('/api/mechanic/assigned-jobcards');
+      const response = await AxiosInstance.get('/api/mechanic/assigned-jobcards');
       
       if (response.data.success) {
         // Update property names to match updated components
@@ -51,7 +51,7 @@ const MechanicDashboard = () => {
     setIsUpdating(true);
   
     try {
-      const response = await axiosInstance.put(`/api/mechanic/update-service-record-status/${serviceRecordId}`, {
+      const response = await AxiosInstance.put(`/api/mechanic/update-service-record-status/${serviceRecordId}`, {
         status: newStatus,
       });
   
@@ -195,15 +195,17 @@ const MechanicDashboard = () => {
         renderEmptyState()
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {assignedJobCards.map(jobCard => (
-            <JobCardStatusCard
-              key={jobCard.JobCardID}
-              jobCard={jobCard}
-              onUpdateServiceStatus={handleUpdateServiceStatus}
-              isUpdating={isUpdating}
-            />
-          ))}
-        </div>
+  {assignedJobCards.map(jobCard => (
+    <JobCardStatusCard
+      key={jobCard.JobCardID}
+      jobCard={jobCard}
+      onUpdateServiceStatus={handleUpdateServiceStatus}
+      isUpdating={isUpdating}
+      onJobCardFinished={fetchAssignedJobCards}
+    />
+  ))}
+</div>
+
       )}
     </div>
   );

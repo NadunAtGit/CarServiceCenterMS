@@ -613,20 +613,24 @@ router.get("/:type/download", authenticateToken, authorizeRoles(["Admin"]), asyn
       weekEnd.setDate(weekStart.getDate() + 6);
       weekEnd.setHours(23, 59, 59, 999);
   
-      const summaryQuery = `
-        SELECT 
-            COUNT(i.Invoice_ID) AS transactions,
-            SUM(i.Total) AS totalRevenue,
-            SUM(i.Labour_Cost) AS serviceRevenue,
-            SUM(i.Parts_Cost) AS partsRevenue,
-            COUNT(DISTINCT j.JobCardID) AS servicesCompleted,
-            (SELECT COUNT(*) FROM Parts_Used pu 
-             JOIN Invoice inv ON pu.InvoiceID = inv.Invoice_ID 
-             WHERE inv.GeneratedDate BETWEEN ? AND ?) AS partsSold
-        FROM Invoice i
-        LEFT JOIN JobCards j ON i.JobCard_ID = j.JobCardID
-        WHERE i.GeneratedDate BETWEEN ? AND ?
-      `;
+      // Modify your summaryQuery to ensure proper aggregation
+ const summaryQuery = `
+  SELECT 
+      COUNT(i.Invoice_ID) AS transactions,
+      SUM(i.Total) AS totalRevenue,
+      SUM(i.Labour_Cost) AS serviceRevenue,
+      SUM(i.Parts_Cost) AS partsRevenue,
+      COUNT(DISTINCT j.JobCardID) AS servicesCompleted,
+      (SELECT COUNT(*) FROM Parts_Used pu 
+       JOIN Invoice inv ON pu.InvoiceID = inv.Invoice_ID 
+       WHERE inv.GeneratedDate BETWEEN ? AND ?) AS partsSold
+  FROM Invoice i
+  LEFT JOIN JobCards j ON i.JobCard_ID = j.JobCardID
+  WHERE i.GeneratedDate BETWEEN ? AND ?
+`;
+
+ 
+
       
       const dailyBreakdownQuery = `
         SELECT 

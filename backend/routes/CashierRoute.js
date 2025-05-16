@@ -102,36 +102,36 @@ router.put("/approveorder/:orderid", authenticateToken, authorizeRoles(["Cashier
     };
 
     // Function to generate sequential FulfillmentIDs
-        // Track the last used ID within the current transaction
-let lastFulfillmentID = 0;
+    // Track the last used ID within the current transaction
+    let lastFulfillmentID = 0;
 
-const generateFulfillmentID = () => {
-    return new Promise((resolve, reject) => {
-        const query = "SELECT FulfillmentID FROM FulfilledOrderItems ORDER BY FulfillmentID DESC LIMIT 1";
+    const generateFulfillmentID = () => {
+        return new Promise((resolve, reject) => {
+            const query = "SELECT FulfillmentID FROM FulfilledOrderItems ORDER BY FulfillmentID DESC LIMIT 1";
 
-        db.query(query, (err, result) => {
-            if (err) {
-                reject("Error generating FulfillmentID: " + err);
-                return;
-            }
+            db.query(query, (err, result) => {
+                if (err) {
+                    reject("Error generating FulfillmentID: " + err);
+                    return;
+                }
 
-            let newFulfillmentID;
-            if (result.length > 0) {
-                const lastLogID = result[0].FulfillmentID;
-                const lastNumber = parseInt(lastLogID.split('-')[1], 10);
-                const newNumber = (lastNumber + 1 + lastFulfillmentID).toString().padStart(4, '0');
-                newFulfillmentID = `FUL-${newNumber}`;
-            } else {
-                newFulfillmentID = `FUL-${(1 + lastFulfillmentID).toString().padStart(4, '0')}`;
-            }
-            
-            // Increment the counter for the next ID within this transaction
-            lastFulfillmentID++;
-            
-            resolve(newFulfillmentID);
+                let newFulfillmentID;
+                if (result.length > 0) {
+                    const lastLogID = result[0].FulfillmentID;
+                    const lastNumber = parseInt(lastLogID.split('-')[1], 10);
+                    const newNumber = (lastNumber + 1 + lastFulfillmentID).toString().padStart(4, '0');
+                    newFulfillmentID = `FUL-${newNumber}`;
+                } else {
+                    newFulfillmentID = `FUL-${(1 + lastFulfillmentID).toString().padStart(4, '0')}`;
+                }
+                
+                // Increment the counter for the next ID within this transaction
+                lastFulfillmentID++;
+                
+                resolve(newFulfillmentID);
+            });
         });
-    });
-};
+    };
 
     try {
         // Step 1: Check if the order exists
@@ -187,6 +187,8 @@ const generateFulfillmentID = () => {
                     const fulfilledParts = [];
                     // Track generated fulfillment IDs
                     const fulfillmentIDs = [];
+                    // Track parts to update main stock
+                    const partsToUpdate = {};
                     
                     // Process each part in the order
                     const processNextPart = (index) => {
@@ -275,21 +277,47 @@ const generateFulfillmentID = () => {
                                             return;
                                         }
 
-                                        // Commit the transaction
-                                        db.commit(err => {
-                                            if (err) {
-                                                db.rollback(() => {
-                                                    return res.status(500).json({ message: "Error committing transaction", error: err });
+                                        // Update main Parts table stock
+                                        const updatePartsPromises = Object.keys(partsToUpdate).map(partId => {
+                                            return new Promise((resolve, reject) => {
+                                                const updatePartQuery = `
+                                                    UPDATE Parts 
+                                                    SET Stock = Stock - ? 
+                                                    WHERE PartID = ?`;
+                                                
+                                                db.query(updatePartQuery, [partsToUpdate[partId], partId], (err, result) => {
+                                                    if (err) {
+                                                        reject(err);
+                                                    } else {
+                                                        resolve(result);
+                                                    }
                                                 });
-                                                return;
-                                            }
-
-                                            // Success response
-                                            res.status(200).json({ 
-                                                message: "Order approved and fulfilled successfully using FIFO method",
-                                                fulfilledParts: fulfilledParts
                                             });
                                         });
+
+                                        Promise.all(updatePartsPromises)
+                                            .then(() => {
+                                                // Commit the transaction
+                                                db.commit(err => {
+                                                    if (err) {
+                                                        db.rollback(() => {
+                                                            return res.status(500).json({ message: "Error committing transaction", error: err });
+                                                        });
+                                                        return;
+                                                    }
+
+                                                    // Success response
+                                                    res.status(200).json({ 
+                                                        message: "Order approved and fulfilled successfully using FIFO method",
+                                                        fulfilledParts: fulfilledParts
+                                                    });
+                                                });
+                                            })
+                                            .catch(err => {
+                                                db.rollback(() => {
+                                                    return res.status(500).json({ message: "Error updating Parts stock", error: err });
+                                                });
+                                            });
                                     });
                                 });
                             });
@@ -357,6 +385,13 @@ const generateFulfillmentID = () => {
                                             return res.status(500).json({ message: "Error updating batch quantity", error: err });
                                         });
                                         return;
+                                    }
+
+                                    // Track parts to update in main Parts table
+                                    if (partsToUpdate[part.PartID]) {
+                                        partsToUpdate[part.PartID] += quantityFromBatch;
+                                    } else {
+                                        partsToUpdate[part.PartID] = quantityFromBatch;
                                     }
 
                                     // Generate LogID using the sequential method
@@ -432,6 +467,7 @@ const generateFulfillmentID = () => {
         res.status(500).json({ message: "Internal server error", error });
     }
 });
+
 
 
 router.put("/rejectorder/:orderid", authenticateToken, authorizeRoles(["Cashier"]), async (req, res) => {
@@ -1514,52 +1550,204 @@ router.delete('/services/:serviceId', authenticateToken, authorizeRoles(["Admin"
     });
 }); 
 
-router.put("/confirm-cash-payment/:InvoiceID", authenticateToken,authorizeRoles(['Cashier']), async (req, res) => {
-    try {
-      const { InvoiceID } = req.params;
+router.put("/confirm-cash-payment/:InvoiceID", authenticateToken, authorizeRoles(['Cashier']), async (req, res) => {
+  try {
+    const { InvoiceID } = req.params;
+    const cashierId = req.user.EmployeeID; // Get the cashier's ID from the token
+    
+    console.log(`Processing payment confirmation for Invoice: ${InvoiceID} by Cashier: ${cashierId}`);
+    
+    // First, get the invoice details and customer information
+    const getInvoiceQuery = `
+      SELECT i.*, jc.JobCardID, a.VehicleID, v.CustomerID, c.FirstName as CustomerName, c.FirebaseToken
+      FROM Invoice i
+      JOIN JobCards jc ON i.JobCard_ID = jc.JobCardID
+      JOIN Appointments a ON jc.AppointmentID = a.AppointmentID
+      JOIN Vehicles v ON a.VehicleID = v.VehicleNo
+      JOIN Customers c ON v.CustomerID = c.CustomerID
+      WHERE i.Invoice_ID = ?
+    `;
+    
+    db.query(getInvoiceQuery, [InvoiceID], async (err, invoiceResults) => {
+      if (err) {
+        console.error("Database error fetching invoice:", err);
+        return res.status(500).json({
+          success: false,
+          message: "Failed to fetch invoice details",
+          error: err.message
+        });
+      }
+      
+      if (invoiceResults.length === 0) {
+        console.log(`Invoice not found: ${InvoiceID}`);
+        return res.status(404).json({
+          success: false,
+          message: "Invoice not found"
+        });
+      }
+      
+      const invoiceDetails = invoiceResults[0];
+      console.log("Invoice details retrieved:", {
+        InvoiceID,
+        CustomerID: invoiceDetails.CustomerID,
+        CustomerName: invoiceDetails.CustomerName,
+        HasFirebaseToken: !!invoiceDetails.FirebaseToken,
+        Total: invoiceDetails.Total
+      });
+      
+      // Check if invoice is already paid
+      if (invoiceDetails.PaidStatus === 'Paid') {
+        console.log(`Invoice ${InvoiceID} is already paid`);
+        return res.status(400).json({
+          success: false,
+          message: "Invoice is already marked as paid"
+        });
+      }
       
       // Update the invoice status to "Paid" and set the payment method to "Cash"
       const updateQuery = `
         UPDATE Invoice 
-        SET  PaymentMethod = 'Cash',
+        SET PaymentMethod = 'Cash',
             PaidStatus = 'Paid',
-            PaymentDate = CURRENT_TIMESTAMP
+            PaymentDate = CURRENT_TIMESTAMP,
+            GeneratedBy = ?
         WHERE Invoice_ID = ?
       `;
       
-      db.query(updateQuery, [InvoiceID], (err, result) => {
-        if (err) {
-          console.error("Database error:", err);
+      db.query(updateQuery, [cashierId, InvoiceID], async (updateErr, updateResult) => {
+        if (updateErr) {
+          console.error("Database error updating invoice:", updateErr);
           return res.status(500).json({
             success: false,
             message: "Failed to update invoice payment status",
-            error: err.message
+            error: updateErr.message
           });
         }
         
-        if (result.affectedRows === 0) {
+        if (updateResult.affectedRows === 0) {
+          console.log(`No rows affected when updating invoice ${InvoiceID}`);
           return res.status(404).json({
             success: false,
             message: "Invoice not found or already paid"
           });
         }
         
-        return res.status(200).json({
-          success: true,
-          message: "Invoice marked as paid successfully",
-          invoiceId: InvoiceID
-        });
+        console.log(`Successfully marked invoice ${InvoiceID} as paid`);
+        
+        // Prepare notification data
+        const { CustomerID, CustomerName, FirebaseToken, Total, JobCardID, VehicleID } = invoiceDetails;
+        
+        // Ensure Total is treated as a number
+        const totalAmount = typeof Total === 'number' ? Total : Number(Total || 0);
+        
+        const notificationTitle = 'Payment Confirmed';
+        const notificationBody = `Dear ${CustomerName}, your payment of LKR ${totalAmount.toFixed(2)} for invoice #${InvoiceID} has been received. Thank you!`;
+        
+        console.log("Preparing notification with message:", notificationBody);
+        let notificationSent = false;
+        
+        // Send FCM notification if token exists
+        if (FirebaseToken) {
+          console.log(`Attempting to send FCM notification to token: ${FirebaseToken.substring(0, 10)}...`);
+          
+          const notificationMessage = {
+            notification: {
+              title: notificationTitle,
+              body: notificationBody,
+            },
+            data: {
+              invoiceID: InvoiceID,
+              type: 'payment_confirmation',
+              amount: totalAmount.toString(),
+              jobCardID: JobCardID || '',
+              vehicleID: VehicleID || ''
+            },
+            token: FirebaseToken,
+          };
+
+          try {
+            await messaging.send(notificationMessage);
+            console.log("FCM notification sent successfully for payment confirmation!");
+            notificationSent = true;
+          } catch (notificationError) {
+            console.error("Error sending FCM notification:", notificationError);
+            console.error("Error details:", notificationError.errorInfo || notificationError.message);
+          }
+        } else {
+          console.log("No Firebase token available for customer. Skipping FCM notification.");
+        }
+        
+        // Store notification in database regardless of FCM success
+        try {
+          console.log("Generating notification ID for database storage");
+          const notificationID = await generateNotificationId();
+          
+          const insertNotificationQuery = `
+            INSERT INTO notifications 
+            (notification_id, CustomerID, title, message, notification_type, icon_type, color_code, is_read, created_at, navigate_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, FALSE, CURRENT_TIMESTAMP, ?)`;
+
+          console.log("Storing notification in database with ID:", notificationID);
+          
+          await new Promise((resolve, reject) => {
+            db.query(
+              insertNotificationQuery,
+              [
+                notificationID,
+                CustomerID,
+                notificationTitle,
+                notificationBody,
+                'Payment Confirmed',
+                'payment',
+                '#4CAF50', // Green color for success
+                InvoiceID // navigate_id (InvoiceID)
+              ],
+              (err, result) => {
+                if (err) {
+                  console.error("Error storing payment notification in DB:", err);
+                  return reject(err);
+                }
+                console.log("Notification stored successfully in database");
+                resolve(result);
+              }
+            );
+          });
+          
+          // Return success response with notification details
+          console.log("Sending success response to client");
+          return res.status(200).json({
+            success: true,
+            message: "Invoice marked as paid successfully and notification sent",
+            invoiceId: InvoiceID,
+            notificationSent,
+            notificationID
+          });
+          
+        } catch (dbNotificationErr) {
+          console.error("Failed to store payment notification in DB:", dbNotificationErr);
+          
+          // Still return success for the payment, even if notification storage failed
+          return res.status(200).json({
+            success: true,
+            message: "Invoice marked as paid successfully but failed to store notification",
+            invoiceId: InvoiceID,
+            notificationSent
+          });
+        }
       });
-      
-    } catch (error) {
-      console.error("Error updating invoice payment:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Failed to process payment",
-        error: error.message
-      });
-    }
-  });
+    });
+    
+  } catch (error) {
+    console.error("Error updating invoice payment:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to process payment",
+      error: error.message
+    });
+  }
+});
+
+
 
 
 

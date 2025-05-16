@@ -4,7 +4,7 @@ import ServiceItem from './ServiceItem';
 import OrderPartsModal from '../Modals/OrderPartsModal';
 import AxiosInstance from '../../utils/axiosInstance';
 
-const JobCardStatusCard = ({ jobCard, onUpdateServiceStatus, isUpdating }) => {
+const JobCardStatusCard = ({ jobCard, onUpdateServiceStatus, isUpdating, onJobCardFinished }) => {
   const [showOrderPartsModal, setShowOrderPartsModal] = useState(false);
   const [isOrderingParts, setIsOrderingParts] = useState(false);
   const [isFinishingJobCard, setIsFinishingJobCard] = useState(false);
@@ -71,7 +71,10 @@ const JobCardStatusCard = ({ jobCard, onUpdateServiceStatus, isUpdating }) => {
       
       if (response.data) {
         alert('Job card completed successfully!');
-        // Optionally refresh the job card data or redirect
+        // Call the callback function to refresh the parent component
+        if (onJobCardFinished) {
+          onJobCardFinished();
+        }
       }
     } catch (error) {
       console.error('Error finishing job card:', error);
@@ -147,31 +150,46 @@ const JobCardStatusCard = ({ jobCard, onUpdateServiceStatus, isUpdating }) => {
         </div>
       
         {/* Next Service Mileage Input - Only show when all services are finished */}
-        {allServicesFinished && (
-          <div className="mt-4 p-4 border border-gray-200 rounded-md bg-gray-50">
-            <h3 className="font-medium text-gray-800 mb-2">
-              Set Next Service Mileage
-            </h3>
-            <div className="flex flex-col">
-              <div className="flex items-center">
-                <input
-                  type="number"
-                  value={nextServiceMileage}
-                  onChange={(e) => setNextServiceMileage(e.target.value)}
-                  placeholder="Enter next service mileage"
-                  className={`w-full p-2 border rounded-md ${mileageError ? 'border-red-500' : 'border-gray-300'}`}
-                />
-                <span className="ml-2 text-gray-600">km</span>
-              </div>
-              {mileageError && (
-                <p className="text-red-500 text-sm mt-1">{mileageError}</p>
-              )}
-              <p className="text-sm text-gray-500 mt-2">
-                Enter the mileage when the vehicle should be serviced next.
-              </p>
-            </div>
-          </div>
-        )}
+        {/* Next Service Mileage Input - Only show when all services are finished */}
+{allServicesFinished && (
+  <div className="mt-4 p-4 border border-gray-200 rounded-md bg-gray-50">
+    <h3 className="font-medium text-gray-800 mb-2">
+      Set Next Service Mileage
+    </h3>
+    
+    {/* Add this section to prominently display current mileage */}
+    <div className="mb-3 p-2 bg-blue-50 border border-blue-100 rounded-md">
+      <div className="flex items-center">
+        <FiClock className="text-blue-600 mr-2" />
+        <span className="text-sm font-medium text-gray-700">Current Mileage:</span>
+        <span className="ml-2 text-sm font-bold text-blue-700">{jobCard.ServiceMilleage || '0'} km</span>
+      </div>
+      <p className="text-xs text-gray-500 mt-1">
+        Next service mileage must be greater than the current mileage
+      </p>
+    </div>
+    
+    <div className="flex flex-col">
+      <div className="flex items-center">
+        <input
+          type="number"
+          value={nextServiceMileage}
+          onChange={(e) => setNextServiceMileage(e.target.value)}
+          placeholder="Enter next service mileage"
+          className={`w-full p-2 border rounded-md ${mileageError ? 'border-red-500' : 'border-gray-300'}`}
+        />
+        <span className="ml-2 text-gray-600">km</span>
+      </div>
+      {mileageError && (
+        <p className="text-red-500 text-sm mt-1">{mileageError}</p>
+      )}
+      <p className="text-sm text-gray-500 mt-2">
+        Enter the mileage when the vehicle should be serviced next.
+      </p>
+    </div>
+  </div>
+)}
+
       
         <div className="mt-4 flex justify-end space-x-3">
           {!allServicesFinished && (

@@ -117,13 +117,22 @@ const OrderPartsModal = ({ jobCard, onClose, onSubmit }) => {
         
         // Check real-time availability
         const availability = await checkPartAvailability(value);
+        
         if (availability) {
-          // Ensure we're working with numbers for comparison
           const availableQty = Number(availability.availableQuantity);
           
-          // Set availability based on actual quantity, not just the flag
+          // Update the selected part in the current service
           updatedParts[serviceIndex].parts[partIndex].isAvailable = availableQty > 0;
           updatedParts[serviceIndex].parts[partIndex].availableQuantity = availableQty;
+          
+          // Also update the availableParts state with the new quantity
+          setAvailableParts(prevParts => 
+            prevParts.map(p => 
+              p.PartID === value 
+                ? {...p, availableQuantity: availableQty, isAvailable: availableQty > 0} 
+                : p
+            )
+          );
           
           // Show toast if part is not available
           if (availableQty <= 0) {
@@ -236,40 +245,52 @@ const OrderPartsModal = ({ jobCard, onClose, onSubmit }) => {
                               onChange={(e) => handlePartChange(serviceIndex, partIndex, 'PartID', e.target.value)}
                             >
                               <option value="">Select Part</option>
-                              {availableParts.map(availablePart => (
-                                <option 
-                                  key={availablePart.PartID} 
-                                  value={availablePart.PartID}
-                                  disabled={Number(availablePart.availableQuantity) <= 0}
-                                >
-                                  {availablePart.Name} ({availablePart.PartNumber || 'N/A'}) - 
-                                  {Number(availablePart.availableQuantity) > 0 
-                                    ? ` ${availablePart.availableQuantity} available` 
-                                    : ' Out of stock'}
-                                </option>
-                              ))}
+                              {availableParts.map(availablePart => {
+                                // Get the real-time availability from partAvailability if it exists
+                                const realTimeAvailability = partAvailability[availablePart.PartID];
+                                const actualQuantity = realTimeAvailability 
+                                  ? Number(realTimeAvailability.availableQuantity) 
+                                  : Number(availablePart.availableQuantity);
+                                
+                                return (
+                                  <option 
+                                    key={availablePart.PartID} 
+                                    value={availablePart.PartID}
+                                    disabled={actualQuantity <= 0}
+                                  >
+                                    {availablePart.Name} ({availablePart.PartNumber || 'N/A'}) - 
+                                    {actualQuantity > 0 
+                                      ? ` ${actualQuantity} available` 
+                                      : ' Out of stock'}
+                                  </option>
+                                );
+                              })}
                             </select>
                             
-                            {/* Availability indicator - Fixed to use Number conversion */}
+                            {/* Availability indicator */}
                             {part.PartID && (
                               <div className="text-xs mt-1 flex items-center">
-                                {Number(part.availableQuantity) > 0 ? (
-                                  <>
-                                    <FiCheckCircle className="text-green-500 mr-1" />
-                                    <span className={Number(part.Quantity) > Number(part.availableQuantity) 
-                                      ? "text-orange-500" 
-                                      : "text-green-500"
-                                    }>
-                                      {part.availableQuantity} available
-                                      {Number(part.Quantity) > Number(part.availableQuantity) && 
-                                        ` (${part.Quantity - part.availableQuantity} short)`}
-                                    </span>
-                                  </>
+                                {partAvailability[part.PartID] ? (
+                                  Number(partAvailability[part.PartID].availableQuantity) > 0 ? (
+                                    <>
+                                      <FiCheckCircle className="text-green-500 mr-1" />
+                                      <span className={Number(part.Quantity) > Number(partAvailability[part.PartID].availableQuantity) 
+                                        ? "text-orange-500" 
+                                        : "text-green-500"
+                                      }>
+                                        {partAvailability[part.PartID].availableQuantity} available
+                                        {Number(part.Quantity) > Number(partAvailability[part.PartID].availableQuantity) && 
+                                          ` (${part.Quantity - partAvailability[part.PartID].availableQuantity} short)`}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <FiAlertCircle className="text-red-500 mr-1" />
+                                      <span className="text-red-500">Out of stock</span>
+                                    </>
+                                  )
                                 ) : (
-                                  <>
-                                    <FiAlertCircle className="text-red-500 mr-1" />
-                                    <span className="text-red-500">Out of stock</span>
-                                  </>
+                                  <span className="text-gray-500">Checking availability...</span>
                                 )}
                               </div>
                             )}

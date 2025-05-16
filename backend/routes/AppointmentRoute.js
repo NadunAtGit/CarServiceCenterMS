@@ -15,7 +15,7 @@ router.use((req, res, next) => {
 
 
 
-// router.post("/make-appointment", authenticateToken, async (req, res) => {
+
 //     const { customerId } = req.user; // Get the customerId from the token
 //     const { Date, Time, VehicleNo } = req.body; // Get the data from the request body
 
