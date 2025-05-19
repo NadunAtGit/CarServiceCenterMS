@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { FiSearch, FiRefreshCcw, FiPlus } from "react-icons/fi";
 import { AiOutlineInfoCircle, AiOutlineDelete } from "react-icons/ai";
@@ -14,6 +13,7 @@ const ServiceAdvisorJobCards = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [allJobCards, setAllJobcards] = useState([]);
   const [todayAppointments, setTodayAppointments] = useState([]);
+  const [appointmentDetails, setAppointmentDetails] = useState({}); // Stores extended appointment details
   const [searchQuery, setSearchQuery] = useState("");
   const [openAddModal, setOpenAddModal] = useState({
     isShown: false,
@@ -41,15 +41,48 @@ const ServiceAdvisorJobCards = () => {
     setIsLoading(false);
   };
 
+  const fetchAppointmentDetails = async (appointmentId) => {
+    try {
+      const response = await axiosInstance.get(`/api/appointments/${appointmentId}/details`);
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching appointment details:", error);
+      return null;
+    }
+  };
+
   const getTodayAppointments = async () => {
     setIsLoading(true);
     try {
       const response = await axiosInstance.get("api/appointments/today");
       if (response.data.success) {
-        setTodayAppointments(response.data.appointments);
+        const appointments = response.data.appointments;
+        setTodayAppointments(appointments);
+
+        // Fetch additional details for each appointment
+        const detailsPromises = appointments.map(async (appointment) => {
+          const details = await fetchAppointmentDetails(appointment.AppointmentID);
+          return {
+            ...appointment,
+            ...details
+          };
+        });
+
+        const detailedAppointments = await Promise.all(detailsPromises);
+        
+        // Create a mapping of appointment details
+        const detailsMap = {};
+        detailedAppointments.forEach(app => {
+          if (app) {
+            detailsMap[app.AppointmentID] = app;
+          }
+        });
+        
+        setAppointmentDetails(detailsMap);
+        
         // Set the first appointment as selected by default if available
-        if (response.data.appointments.length > 0 && !selectedAppointment) {
-          setSelectedAppointment(response.data.appointments[0]);
+        if (appointments.length > 0 && !selectedAppointment) {
+          setSelectedAppointment(detailsMap[appointments[0].AppointmentID] || appointments[0]);
         }
       }
     } catch (error) {
@@ -74,7 +107,9 @@ const ServiceAdvisorJobCards = () => {
     // Update selected appointment if it was the one that was just processed
     if (selectedAppointment && selectedAppointment.AppointmentID === appointmentId) {
       const remainingAppointments = todayAppointments.filter(app => app.AppointmentID !== appointmentId);
-      setSelectedAppointment(remainingAppointments.length > 0 ? remainingAppointments[0] : null);
+      setSelectedAppointment(remainingAppointments.length > 0 ? 
+        appointmentDetails[remainingAppointments[0].AppointmentID] || remainingAppointments[0] : 
+        null);
     }
     
     // Refresh job cards list
@@ -99,7 +134,9 @@ const ServiceAdvisorJobCards = () => {
     setOpenAddModal({
       isShown: true,
       data: {
-        appointmentId: appointment.AppointmentID
+        appointmentId: appointment.AppointmentID,
+        customerId: appointment.CustomerID,
+        vehicleId: appointment.VehicleID
       }
     });
   };
@@ -147,9 +184,20 @@ const ServiceAdvisorJobCards = () => {
     afterChange: (current) => {
       // Update the selected appointment when slide changes
       if (todayAppointments.length > 0) {
-        setSelectedAppointment(todayAppointments[current]);
+        const appointmentId = todayAppointments[current].AppointmentID;
+        setSelectedAppointment(appointmentDetails[appointmentId] || todayAppointments[current]);
       }
     }
+  };
+
+  // Format time for display
+  const formatTime = (timeString) => {
+    if (!timeString) return '';
+    const [hours, minutes] = timeString.split(':');
+    const hour = parseInt(hours, 10);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour % 12 || 12;
+    return `${displayHour}:${minutes} ${ampm}`;
   };
 
   return (
@@ -169,16 +217,23 @@ const ServiceAdvisorJobCards = () => {
         ) : (
           <div className="relative flex w-full justify-center mx-auto mb-8">
             <Slider {...settings} className="max-w-4xl w-full">
-              {todayAppointments.map((appointment) => (
-                <div key={appointment.AppointmentID} className="px-2">
-                  <CreateJobCard 
-                    appointment={appointment} 
-                    recallCarousel={getTodayAppointments} 
-                    recallTable={getJobCards} 
-                    onCreateJobCard={openAddJobCardModal}
-                  />
-                </div>
-              ))}
+              {todayAppointments.map((appointment) => {
+                const details = appointmentDetails[appointment.AppointmentID] || {};
+                return (
+                  <div key={appointment.AppointmentID} className="px-2">
+                    <CreateJobCard 
+                      appointment={{
+                        ...appointment,
+                        ...details,
+                        formattedTime: formatTime(appointment.Time)
+                      }} 
+                      recallCarousel={getTodayAppointments} 
+                      recallTable={getJobCards} 
+                      onCreateJobCard={openAddJobCardModal}
+                    />
+                  </div>
+                );
+              })}
             </Slider>
           </div>
         )}
@@ -187,11 +242,30 @@ const ServiceAdvisorJobCards = () => {
         {selectedAppointment && (
           <div className="bg-white/80 rounded-lg shadow-md p-4 mb-6 backdrop-blur-sm border border-[#944EF8]/10">
             <h2 className="text-lg font-semibold text-gray-800 mb-2">Selected Appointment</h2>
-            <p className="text-gray-700">
-              <span className="font-medium">Appointment ID:</span> {selectedAppointment.AppointmentID} | 
-              <span className="font-medium ml-2">Customer:</span> {selectedAppointment.CustomerName || 'N/A'} | 
-              <span className="font-medium ml-2">Vehicle:</span> {selectedAppointment.VehicleModel || 'N/A'}
-            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+              <div>
+                <p className="text-gray-700">
+                  <span className="font-medium">Appointment ID:</span> {selectedAppointment.AppointmentID}
+                </p>
+                <p className="text-gray-700">
+                  <span className="font-medium">Time:</span> {formatTime(selectedAppointment.Time)}
+                </p>
+                <p className="text-gray-700">
+                  <span className="font-medium">Status:</span> {selectedAppointment.Status}
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-700">
+                  <span className="font-medium">Customer:</span> {selectedAppointment.CustomerName || selectedAppointment.CustomerID}
+                </p>
+                <p className="text-gray-700">
+                  <span className="font-medium">Vehicle:</span> {selectedAppointment.VehicleModel || selectedAppointment.VehicleID}
+                </p>
+                <p className="text-gray-700">
+                  <span className="font-medium">Contact:</span> {selectedAppointment.CustomerPhone || 'N/A'}
+                </p>
+              </div>
+            </div>
             <button
               className="mt-3 bg-[#944EF8] text-white py-2 px-4 rounded-lg hover:bg-[#7a3dd0] transition-all duration-300 flex items-center gap-2"
               onClick={() => openAddJobCardModal(selectedAppointment)}
@@ -301,7 +375,7 @@ const ServiceAdvisorJobCards = () => {
               if (selectedAppointment) {
                 openAddJobCardModal(selectedAppointment);
               } else if (todayAppointments.length > 0) {
-                openAddJobCardModal(todayAppointments[0]);
+                openAddJobCardModal(appointmentDetails[todayAppointments[0].AppointmentID] || todayAppointments[0]);
               }
             }}
             title="Add New Job Card"
@@ -344,14 +418,16 @@ const ServiceAdvisorJobCards = () => {
             onClose={onCloseAdd} 
             getJobCards={getJobCards} 
             appointmentId={openAddModal.data?.appointmentId}
+            customerId={openAddModal.data?.customerId}
+            vehicleId={openAddModal.data?.vehicleId}
             getAppointments={getTodayAppointments}
             recallCarousel={getTodayAppointments}
             onSuccessCallback={handleJobCardCreationSuccess}
           />
-      </div>
+        </div>
       </Modal>
     </div>
-);
+  );
 };
 
-export default ServiceAdvisorJobCards;    
+export default ServiceAdvisorJobCards;

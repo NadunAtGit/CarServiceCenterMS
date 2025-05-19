@@ -314,11 +314,183 @@ router.get("/finished-jobcards", authenticateToken, authorizeRoles(["Service Adv
     }
 });
 
+router.get("/approaching-services", authenticateToken, authorizeRoles(["Service Advisor", "Admin"]), async (req, res) => {
+    const query = `
+        SELECT 
+            v.VehicleNo,
+            v.Model,
+            v.Type,
+            v.CurrentMilleage,
+            v.NextServiceMilleage,
+            (v.NextServiceMilleage - v.CurrentMilleage) AS MilleageGap,
+            c.CustomerID,
+            c.FirstName,
+            c.SecondName,
+            c.Telephone,
+            c.Email
+        FROM 
+            Vehicles v
+        JOIN 
+            Customers c ON v.CustomerID = c.CustomerID
+        WHERE 
+            (v.NextServiceMilleage - v.CurrentMilleage) <= 100
+            AND v.NextServiceMilleage > v.CurrentMilleage
+        ORDER BY 
+            MilleageGap ASC;
+    `;
 
+    try {
+        db.query(query, (err, results) => {
+            if (err) {
+                console.error("Database query failed:", err.message);
+                return res.status(500).json({ 
+                    success: false, 
+                    message: "Internal server error while retrieving approaching service vehicles." 
+                });
+            }
 
+            return res.status(200).json({ 
+                success: true, 
+                vehicles: results,
+                count: results.length 
+            });
+        });
+    } catch (error) {
+        console.error("Unexpected error occurred:", error.message);
+        return res.status(500).json({ 
+            success: false, 
+            message: "An unexpected error occurred. Please try again later." 
+        });
+    }
+});
 
-  
+router.post("/notify-approaching-service/:customerId", authenticateToken, authorizeRoles(["Service Advisor", "Admin"]), async (req, res) => {
+    const { customerId } = req.params;
 
+    try {
+        // Get the customer's vehicle that's approaching service
+        const vehicleQuery = `
+            SELECT 
+                v.VehicleNo,
+                v.Model,
+                v.CurrentMilleage,
+                v.NextServiceMilleage,
+                (v.NextServiceMilleage - v.CurrentMilleage) AS MilleageGap,
+                c.CustomerID,
+                c.FirstName,
+                c.SecondName,
+                c.FirebaseToken,
+                c.Email
+            FROM 
+                Vehicles v
+            JOIN 
+                Customers c ON v.CustomerID = c.CustomerID
+            WHERE 
+                c.CustomerID = ?
+                AND (v.NextServiceMilleage - v.CurrentMilleage) <= 100
+                AND v.NextServiceMilleage > v.CurrentMilleage
+            LIMIT 1`;
+
+        db.query(vehicleQuery, [customerId], async (err, results) => {
+            if (err) {
+                console.error("Error fetching vehicle data:", err);
+                return res.status(500).json({ error: true, message: "Database error" });
+            }
+
+            if (results.length === 0) {
+                return res.status(404).json({ 
+                    error: true, 
+                    message: "No vehicle approaching service found for this customer" 
+                });
+            }
+
+            const vehicle = results[0];
+            const notificationTitle = "Vehicle Service Reminder";
+            const notificationBody = `Your vehicle ${vehicle.Model} (${vehicle.VehicleNo}) is approaching its next service. Current: ${vehicle.CurrentMilleage}km, Next service at: ${vehicle.NextServiceMilleage}km`;
+            
+            let fcmSent = false;
+            let dbNotificationId = null;
+
+            // Send FCM notification if token exists
+            if (vehicle.FirebaseToken) {
+                try {
+                    const message = {
+                        notification: {
+                            title: notificationTitle,
+                            body: notificationBody
+                        },
+                        data: {
+                            vehicleNo: vehicle.VehicleNo,
+                            type: 'service_reminder'
+                        },
+                        token: vehicle.FirebaseToken
+                    };
+
+                    await messaging.send(message);
+                    fcmSent = true;
+                } catch (fcmError) {
+                    console.error(`Failed to send FCM to ${customerId}:`, fcmError);
+                }
+            }
+
+            // Store notification in database
+            try {
+                const notificationId = await generateNotificationId();
+                const insertQuery = `
+                    INSERT INTO notifications 
+                    (notification_id, CustomerID, title, message, notification_type, 
+                     icon_type, color_code, is_read, created_at, navigate_id, metadata)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, FALSE, CURRENT_TIMESTAMP, ?, ?)`;
+
+                await new Promise((resolve, reject) => {
+                    db.query(insertQuery, [
+                        notificationId,
+                        customerId,
+                        notificationTitle,
+                        notificationBody,
+                        'Service Reminder',
+                        'car_repair',
+                        '#FFA500',
+                        vehicle.VehicleNo,
+                        JSON.stringify({
+                            vehicleNo: vehicle.VehicleNo,
+                            currentMileage: vehicle.CurrentMilleage,
+                            nextServiceMileage: vehicle.NextServiceMilleage,
+                            gap: vehicle.MilleageGap
+                        })
+                    ], (err) => {
+                        if (err) reject(err);
+                        else {
+                            dbNotificationId = notificationId;
+                            resolve();
+                        }
+                    });
+                });
+            } catch (dbError) {
+                console.error(`Failed to store notification for ${customerId}:`, dbError);
+            }
+
+            return res.status(200).json({
+                success: true,
+                message: "Service reminder notification sent",
+                notification: {
+                    customerId,
+                    vehicleNo: vehicle.VehicleNo,
+                    model: vehicle.Model,
+                    currentMileage: vehicle.CurrentMilleage,
+                    nextServiceMileage: vehicle.NextServiceMilleage,
+                    gap: vehicle.MilleageGap,
+                    fcmSent,
+                    dbNotificationId,
+                    email: vehicle.Email
+                }
+            });
+        });
+    } catch (error) {
+        console.error("Error in approaching service notification:", error);
+        return res.status(500).json({ error: true, message: "Server error" });
+    }
+});
 
 
 

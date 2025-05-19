@@ -286,7 +286,144 @@ router.put("/update-service-record-status/:serviceRecordId", authenticateToken, 
 
 
 
+router.get("/part-orders/:jobCardId", authenticateToken, authorizeRoles(["Mechanic", "Cashier"]), async (req, res) => {
+    const { jobCardId } = req.params;
+    console.log(`[DEBUG] Fetching part orders for job card: ${jobCardId}`);
 
+    try {
+        // Validate jobCardId format
+        if (!jobCardId || !jobCardId.startsWith('JC-')) {
+            console.error(`[ERROR] Invalid job card ID format: ${jobCardId}`);
+            return res.status(400).json({ 
+                message: "Invalid job card ID format. Must start with 'JC-'",
+                error: true
+            });
+        }
+
+        console.log('[DEBUG] Querying orders from database...');
+        const ordersQuery = `
+            SELECT po.*, 
+                   e1.Name as RequestedByName,
+                   e2.Name as ApprovedByName,
+                   e3.Name as FulfilledByName
+            FROM PartOrders po
+            LEFT JOIN Employees e1 ON po.RequestedBy = e1.EmployeeID
+            LEFT JOIN Employees e2 ON po.ApprovedBy = e2.EmployeeID
+            LEFT JOIN Employees e3 ON po.FulfilledBy = e3.EmployeeID
+            WHERE po.JobCardID = ?
+            ORDER BY po.RequestedAt DESC`;
+        
+        db.query(ordersQuery, [jobCardId], (err, orders) => {
+            if (err) {
+                console.error('[ERROR] Database query failed:', err);
+                return res.status(500).json({ 
+                    message: "Error fetching part orders", 
+                    error: err,
+                    details: "Failed to execute orders query"
+                });
+            }
+            
+            console.log(`[DEBUG] Found ${orders.length} orders for job card ${jobCardId}`);
+            
+            if (orders.length === 0) {
+                console.log('[DEBUG] No orders found - returning empty array');
+                return res.status(200).json({ 
+                    message: "No part orders found for this job card", 
+                    orders: [],
+                    success: true
+                });
+            }
+            
+            const orderIds = orders.map(order => order.OrderID);
+            console.log(`[DEBUG] Order IDs to fetch parts for: ${orderIds.join(', ')}`);
+            
+            const partsQuery = `
+                SELECT op.OrderID, op.PartID, op.ServiceRecordID, op.Quantity,
+                       p.Name as PartName, 
+                       sr.Description as ServiceDescription, sr.Status as ServiceStatus
+                FROM Order_Parts op
+                JOIN Parts p ON op.PartID = p.PartID
+                LEFT JOIN ServiceRecords sr ON op.ServiceRecordID = sr.ServiceRecord_ID
+                WHERE op.OrderID IN (?)`;
+            
+            console.log('[DEBUG] Querying order parts...');
+            db.query(partsQuery, [orderIds], (err, parts) => {
+                if (err) {
+                    console.error('[ERROR] Failed to fetch order parts:', err);
+                    return res.status(500).json({ 
+                        message: "Error fetching order parts details", 
+                        error: err,
+                        details: "Failed to execute parts query"
+                    });
+                }
+                
+                console.log(`[DEBUG] Found ${parts.length} parts across all orders`);
+                
+                const fulfillmentQuery = `
+                    SELECT foi.OrderID, foi.PartID, foi.ServiceRecordID, 
+                           foi.RequestedQuantity, foi.FulfilledQuantity, foi.UnitPrice,
+                           foi.FulfillmentDate, e.Name as FulfilledByName
+                    FROM FulfilledOrderItems foi
+                    LEFT JOIN Employees e ON foi.FulfilledBy = e.EmployeeID
+                    WHERE foi.OrderID IN (?)`;
+                
+                console.log('[DEBUG] Querying fulfillment details...');
+                db.query(fulfillmentQuery, [orderIds], (err, fulfillments) => {
+                    if (err) {
+                        console.error('[ERROR] Failed to fetch fulfillment details:', err);
+                        return res.status(500).json({ 
+                            message: "Error fetching fulfillment details", 
+                            error: err,
+                            details: "Failed to execute fulfillment query"
+                        });
+                    }
+                    
+                    console.log(`[DEBUG] Found ${fulfillments ? fulfillments.length : 0} fulfillment records`);
+                    
+                    // Group parts by OrderID
+                    const partsGroupedByOrder = {};
+                    parts.forEach(part => {
+                        if (!partsGroupedByOrder[part.OrderID]) {
+                            partsGroupedByOrder[part.OrderID] = [];
+                        }
+                        partsGroupedByOrder[part.OrderID].push(part);
+                    });
+                    
+                    // Group fulfillment by OrderID
+                    const fulfillmentsGroupedByOrder = {};
+                    if (fulfillments && fulfillments.length > 0) {
+                        fulfillments.forEach(fulfillment => {
+                            if (!fulfillmentsGroupedByOrder[fulfillment.OrderID]) {
+                                fulfillmentsGroupedByOrder[fulfillment.OrderID] = [];
+                            }
+                            fulfillmentsGroupedByOrder[fulfillment.OrderID].push(fulfillment);
+                        });
+                    }
+                    
+                    // Attach parts and fulfillment details to each order
+                    orders.forEach(order => {
+                        order.parts = partsGroupedByOrder[order.OrderID] || [];
+                        order.fulfillments = fulfillmentsGroupedByOrder[order.OrderID] || [];
+                    });
+                    
+                    console.log('[DEBUG] Successfully processed all data - returning response');
+                    res.status(200).json({ 
+                        message: "Part orders retrieved successfully", 
+                        orders,
+                        success: true
+                    });
+                });
+            });
+        });
+    } catch (error) {
+        console.error("[ERROR] Unexpected error in part-orders route:", error);
+        res.status(500).json({ 
+            message: "Internal server error", 
+            error: error.message,
+            stack: error.stack
+        });
+    }
+});
 
 // router.post("/order-parts/:jobCardId", authenticateToken, authorizeRoles(["Mechanic"]), async (req, res) => {
 //     const { jobCardId } = req.params;

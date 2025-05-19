@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FiMenu, FiLogOut } from 'react-icons/fi';
 import { FaUserCircle, FaClipboardList, FaPaperPlane } from 'react-icons/fa';
 import { MdOutlineEventNote } from 'react-icons/md';
+import { MdNotificationsActive } from 'react-icons/md';
 import UserData from '../../components/UserData';
 import axiosInstance from '../../utils/AxiosInstance';
 import { Link, Outlet, useNavigate } from 'react-router-dom';
@@ -62,6 +63,7 @@ const ServiceAdvisorHome = () => {
   const menuItems = [
     { title: "Appointments", icon: <MdOutlineEventNote size={26} />, path: "/serviceadvisor/appointments" },
     { title: "Job Card", icon: <FaClipboardList size={26} />, path: "/serviceadvisor/jobcards" },
+    { title: "Reminders", icon: <MdNotificationsActive size={26} />, path: "/serviceadvisor/reminders" },
   ];
 
   return (

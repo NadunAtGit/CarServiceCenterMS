@@ -12,6 +12,7 @@ import EmployeeDashBoard from './pages/EmployeeDashboard';
 import ServiceAdvisorHome from './pages/ServiceAdvisor/ServiceAdvisorHome';
 import ServiceAdvisorAppointments from './pages/ServiceAdvisor/ServiceAdvisorAppointments';
 import ServiceAdvisorJobCards from './pages/ServiceAdvisor/ServiceAdvisorJobCards';
+import ServiceAdvisorReminders from './pages/ServiceAdvisor/ServiceAdvisorReminders';
 
 import TeamLeaderHome from './pages/TeamLeader/TeamLeaderHome';
 import TeamLeaderAssign from './pages/TeamLeader/TeamLeaderAssign';
@@ -78,6 +79,7 @@ const App = () => {
               <Route index element={<ServiceAdvisorJobCards />} />
               <Route path="appointments" element={<ServiceAdvisorAppointments />} />
               <Route path="jobcards" element={<ServiceAdvisorJobCards />} />
+              <Route path="reminders" element={<ServiceAdvisorReminders />} />
         </Route>
 
 
