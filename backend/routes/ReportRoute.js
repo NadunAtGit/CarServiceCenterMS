@@ -89,7 +89,6 @@ router.get("/monthly-sales", authenticateToken, authorizeRoles(["Admin"]), (req,
     });
 });
 
-
 router.get("/this-month-sales", authenticateToken, authorizeRoles(["Admin"]), (req, res) => {
     const today = new Date();
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -99,6 +98,7 @@ router.get("/this-month-sales", authenticateToken, authorizeRoles(["Admin"]), (r
         SELECT SUM(Total) AS totalSales 
         FROM Invoice 
         WHERE GeneratedDate BETWEEN ? AND ?
+        AND PaidStatus = 'Paid'
     `;
 
     db.query(query, [startOfMonth, endOfMonth], (err, results) => {
@@ -110,6 +110,7 @@ router.get("/this-month-sales", authenticateToken, authorizeRoles(["Admin"]), (r
         res.status(200).json({ totalSales: results[0].totalSales || 0 });
     });
 });
+
 
 
 router.get("/this-month-appointments", authenticateToken, authorizeRoles(["Admin"]), (req, res) => {

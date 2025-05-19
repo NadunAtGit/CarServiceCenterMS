@@ -1557,28 +1557,22 @@ router.put("/confirm-cash-payment/:InvoiceID", authenticateToken, authorizeRoles
     
     console.log(`Processing payment confirmation for Invoice: ${InvoiceID} by Cashier: ${cashierId}`);
     
-    // First, get the invoice details and customer information
-    const getInvoiceQuery = `
-      SELECT i.*, jc.JobCardID, a.VehicleID, v.CustomerID, c.FirstName as CustomerName, c.FirebaseToken
-      FROM Invoice i
-      JOIN JobCards jc ON i.JobCard_ID = jc.JobCardID
-      JOIN Appointments a ON jc.AppointmentID = a.AppointmentID
-      JOIN Vehicles v ON a.VehicleID = v.VehicleNo
-      JOIN Customers c ON v.CustomerID = c.CustomerID
-      WHERE i.Invoice_ID = ?
+    // First, check if the invoice exists and determine its type
+    const checkInvoiceQuery = `
+      SELECT Invoice_ID, JobCard_ID FROM Invoice WHERE Invoice_ID = ?
     `;
     
-    db.query(getInvoiceQuery, [InvoiceID], async (err, invoiceResults) => {
-      if (err) {
-        console.error("Database error fetching invoice:", err);
+    db.query(checkInvoiceQuery, [InvoiceID], async (checkErr, checkResults) => {
+      if (checkErr) {
+        console.error("Database error checking invoice:", checkErr);
         return res.status(500).json({
           success: false,
-          message: "Failed to fetch invoice details",
-          error: err.message
+          message: "Failed to check invoice details",
+          error: checkErr.message
         });
       }
       
-      if (invoiceResults.length === 0) {
+      if (checkResults.length === 0) {
         console.log(`Invoice not found: ${InvoiceID}`);
         return res.status(404).json({
           success: false,
@@ -1586,155 +1580,501 @@ router.put("/confirm-cash-payment/:InvoiceID", authenticateToken, authorizeRoles
         });
       }
       
-      const invoiceDetails = invoiceResults[0];
-      console.log("Invoice details retrieved:", {
-        InvoiceID,
-        CustomerID: invoiceDetails.CustomerID,
-        CustomerName: invoiceDetails.CustomerName,
-        HasFirebaseToken: !!invoiceDetails.FirebaseToken,
-        Total: invoiceDetails.Total
-      });
+      const invoiceRecord = checkResults[0];
       
-      // Check if invoice is already paid
-      if (invoiceDetails.PaidStatus === 'Paid') {
-        console.log(`Invoice ${InvoiceID} is already paid`);
-        return res.status(400).json({
-          success: false,
-          message: "Invoice is already marked as paid"
+      // Determine if this is a regular service invoice or breakdown service invoice
+      if (invoiceRecord.JobCard_ID) {
+        // This is a regular service invoice
+        const getServiceInvoiceQuery = `
+          SELECT i.*, jc.JobCardID, a.VehicleID, v.CustomerID, c.FirstName as CustomerName, c.FirebaseToken
+          FROM Invoice i
+          JOIN JobCards jc ON i.JobCard_ID = jc.JobCardID
+          JOIN Appointments a ON jc.AppointmentID = a.AppointmentID
+          JOIN Vehicles v ON a.VehicleID = v.VehicleNo
+          JOIN Customers c ON v.CustomerID = c.CustomerID
+          WHERE i.Invoice_ID = ?
+        `;
+        
+        db.query(getServiceInvoiceQuery, [InvoiceID], async (err, invoiceResults) => {
+          if (err) {
+            console.error("Database error fetching invoice:", err);
+            return res.status(500).json({
+              success: false,
+              message: "Failed to fetch invoice details",
+              error: err.message
+            });
+          }
+          
+          if (invoiceResults.length === 0) {
+            console.log(`Invoice not found: ${InvoiceID}`);
+            return res.status(404).json({
+              success: false,
+              message: "Invoice not found"
+            });
+          }
+          
+          const invoiceDetails = invoiceResults[0];
+          console.log("Invoice details retrieved:", {
+            InvoiceID,
+            CustomerID: invoiceDetails.CustomerID,
+            CustomerName: invoiceDetails.CustomerName,
+            HasFirebaseToken: !!invoiceDetails.FirebaseToken,
+            Total: invoiceDetails.Total,
+            JobCardID: invoiceDetails.JobCardID
+          });
+          
+          // Check if invoice is already paid
+          if (invoiceDetails.PaidStatus === 'Paid') {
+            console.log(`Invoice ${InvoiceID} is already paid`);
+            return res.status(400).json({
+              success: false,
+              message: "Invoice is already marked as paid"
+            });
+          }
+          
+          // Begin transaction to ensure both invoice and job card updates succeed or fail together
+          db.beginTransaction(async (transactionErr) => {
+            if (transactionErr) {
+              console.error("Error starting transaction:", transactionErr);
+              return res.status(500).json({
+                success: false,
+                message: "Failed to start transaction",
+                error: transactionErr.message
+              });
+            }
+            
+            // Update the invoice status to "Paid" and set the payment method to "Cash"
+            const updateInvoiceQuery = `
+              UPDATE Invoice 
+              SET PaymentMethod = 'Cash',
+                  PaidStatus = 'Paid',
+                  PaymentDate = CURRENT_TIMESTAMP,
+                  GeneratedBy = ?
+              WHERE Invoice_ID = ?
+            `;
+            
+            db.query(updateInvoiceQuery, [cashierId, InvoiceID], (updateInvoiceErr, updateInvoiceResult) => {
+              if (updateInvoiceErr) {
+                return db.rollback(() => {
+                  console.error("Database error updating invoice:", updateInvoiceErr);
+                  res.status(500).json({
+                    success: false,
+                    message: "Failed to update invoice payment status",
+                    error: updateInvoiceErr.message
+                  });
+                });
+              }
+              
+              if (updateInvoiceResult.affectedRows === 0) {
+                return db.rollback(() => {
+                  console.log(`No rows affected when updating invoice ${InvoiceID}`);
+                  res.status(404).json({
+                    success: false,
+                    message: "Invoice not found or already paid"
+                  });
+                });
+              }
+              
+              console.log(`Successfully marked invoice ${InvoiceID} as paid`);
+              
+              // Update the job card status to "Paid"
+              const updateJobCardQuery = `
+                UPDATE JobCards 
+                SET Status = 'Paid' 
+                WHERE JobCardID = ?
+              `;
+              
+              db.query(updateJobCardQuery, [invoiceDetails.JobCardID], (jobCardErr, jobCardResult) => {
+                if (jobCardErr) {
+                  return db.rollback(() => {
+                    console.error("Failed to update job card:", jobCardErr);
+                    res.status(500).json({
+                      success: false,
+                      message: "Failed to update job card status",
+                      error: jobCardErr.message
+                    });
+                  });
+                }
+                
+                console.log(`Successfully updated job card ${invoiceDetails.JobCardID} status to Paid`);
+                
+                // Prepare notification data
+                const { CustomerID, CustomerName, FirebaseToken, Total, JobCardID, VehicleID } = invoiceDetails;
+                
+                // Ensure Total is treated as a number
+                const totalAmount = typeof Total === 'number' ? Total : Number(Total || 0);
+                
+                const notificationTitle = 'Payment Confirmed';
+                const notificationBody = `Dear ${CustomerName}, your payment of LKR ${totalAmount.toFixed(2)} for invoice #${InvoiceID} has been received. Thank you!`;
+                
+                console.log("Preparing notification with message:", notificationBody);
+                let notificationSent = false;
+                
+                // Commit the transaction first to ensure payment is recorded
+                db.commit(async (commitErr) => {
+                  if (commitErr) {
+                    return db.rollback(() => {
+                      console.error("Error committing transaction:", commitErr);
+                      res.status(500).json({
+                        success: false,
+                        message: "Failed to commit transaction",
+                        error: commitErr.message
+                      });
+                    });
+                  }
+                  
+                  // Send FCM notification if token exists
+                  if (FirebaseToken) {
+                    console.log(`Attempting to send FCM notification to token: ${FirebaseToken.substring(0, 10)}...`);
+                    
+                    const notificationMessage = {
+                      notification: {
+                        title: notificationTitle,
+                        body: notificationBody,
+                      },
+                      data: {
+                        invoiceID: InvoiceID,
+                        type: 'payment_confirmation',
+                        amount: totalAmount.toString(),
+                        jobCardID: JobCardID || '',
+                        vehicleID: VehicleID || ''
+                      },
+                      token: FirebaseToken,
+                    };
+
+                    try {
+                      await messaging.send(notificationMessage);
+                      console.log("FCM notification sent successfully for payment confirmation!");
+                      notificationSent = true;
+                    } catch (notificationError) {
+                      console.error("Error sending FCM notification:", notificationError);
+                      console.error("Error details:", notificationError.errorInfo || notificationError.message);
+                    }
+                  } else {
+                    console.log("No Firebase token available for customer. Skipping FCM notification.");
+                  }
+                  
+                  // Store notification in database regardless of FCM success
+                  try {
+                    console.log("Generating notification ID for database storage");
+                    const notificationID = await generateNotificationId();
+                    
+                    const insertNotificationQuery = `
+                      INSERT INTO notifications 
+                      (notification_id, CustomerID, title, message, notification_type, icon_type, color_code, is_read, created_at, navigate_id)
+                      VALUES (?, ?, ?, ?, ?, ?, ?, FALSE, CURRENT_TIMESTAMP, ?)`;
+
+                    console.log("Storing notification in database with ID:", notificationID);
+                    
+                    await new Promise((resolve, reject) => {
+                      db.query(
+                        insertNotificationQuery,
+                        [
+                          notificationID,
+                          CustomerID,
+                          notificationTitle,
+                          notificationBody,
+                          'Payment Confirmed',
+                          'payment',
+                          '#4CAF50', // Green color for success
+                          InvoiceID // navigate_id (InvoiceID)
+                        ],
+                        (err, result) => {
+                          if (err) {
+                            console.error("Error storing payment notification in DB:", err);
+                            return reject(err);
+                          }
+                          console.log("Notification stored successfully in database");
+                          resolve(result);
+                        }
+                      );
+                    });
+                    
+                    // Return success response with notification details
+                    console.log("Sending success response to client");
+                    return res.status(200).json({
+                      success: true,
+                      message: "Invoice and job card marked as paid successfully and notification sent",
+                      invoiceId: InvoiceID,
+                      jobCardId: JobCardID,
+                      notificationSent,
+                      notificationID
+                    });
+                    
+                  } catch (dbNotificationErr) {
+                    console.error("Failed to store payment notification in DB:", dbNotificationErr);
+                    
+                    // Still return success for the payment, even if notification storage failed
+                    return res.status(200).json({
+                      success: true,
+                      message: "Invoice and job card marked as paid successfully but failed to store notification",
+                      invoiceId: InvoiceID,
+                      jobCardId: JobCardID,
+                      notificationSent
+                    });
+                  }
+                });
+              });
+            });
+          });
+        });
+      } else {
+        // This is a breakdown service invoice
+        const getBreakdownInvoiceQuery = `
+          SELECT i.*, br.RequestID, br.CustomerID, c.FirstName as CustomerName, c.FirebaseToken
+          FROM Invoice i
+          LEFT JOIN BreakdownRequests br ON i.Invoice_ID = br.InvoiceID
+          LEFT JOIN Customers c ON br.CustomerID = c.CustomerID
+          WHERE i.Invoice_ID = ?
+        `;
+        
+        db.query(getBreakdownInvoiceQuery, [InvoiceID], async (err, invoiceResults) => {
+          if (err) {
+            console.error("Database error fetching breakdown invoice:", err);
+            return res.status(500).json({
+              success: false,
+              message: "Failed to fetch breakdown invoice details",
+              error: err.message
+            });
+          }
+          
+          if (invoiceResults.length === 0) {
+            console.log(`Breakdown invoice not found: ${InvoiceID}`);
+            return res.status(404).json({
+              success: false,
+              message: "Breakdown invoice not found"
+            });
+          }
+          
+          const invoiceDetails = invoiceResults[0];
+          console.log("Breakdown invoice details retrieved:", {
+            InvoiceID,
+            CustomerID: invoiceDetails.CustomerID,
+            CustomerName: invoiceDetails.CustomerName,
+            HasFirebaseToken: !!invoiceDetails.FirebaseToken,
+            Total: invoiceDetails.Total,
+            RequestID: invoiceDetails.RequestID
+          });
+          
+          // Check if invoice is already paid
+          if (invoiceDetails.PaidStatus === 'Paid') {
+            console.log(`Invoice ${InvoiceID} is already paid`);
+            return res.status(400).json({
+              success: false,
+              message: "Invoice is already marked as paid"
+            });
+          }
+          
+          // Begin transaction
+          db.beginTransaction(async (transactionErr) => {
+            if (transactionErr) {
+              console.error("Error starting transaction:", transactionErr);
+              return res.status(500).json({
+                success: false,
+                message: "Failed to start transaction",
+                error: transactionErr.message
+              });
+            }
+            
+            // Update the invoice status to "Paid" and set the payment method to "Cash"
+            const updateInvoiceQuery = `
+              UPDATE Invoice 
+              SET PaymentMethod = 'Cash',
+                  PaidStatus = 'Paid',
+                  PaymentDate = CURRENT_TIMESTAMP,
+                  GeneratedBy = ?
+              WHERE Invoice_ID = ?
+            `;
+            
+            db.query(updateInvoiceQuery, [cashierId, InvoiceID], (updateInvoiceErr, updateInvoiceResult) => {
+              if (updateInvoiceErr) {
+                return db.rollback(() => {
+                  console.error("Database error updating invoice:", updateInvoiceErr);
+                  res.status(500).json({
+                    success: false,
+                    message: "Failed to update invoice payment status",
+                    error: updateInvoiceErr.message
+                  });
+                });
+              }
+              
+              if (updateInvoiceResult.affectedRows === 0) {
+                return db.rollback(() => {
+                  console.log(`No rows affected when updating invoice ${InvoiceID}`);
+                  res.status(404).json({
+                    success: false,
+                    message: "Invoice not found or already paid"
+                  });
+                });
+              }
+              
+              console.log(`Successfully marked breakdown invoice ${InvoiceID} as paid`);
+              
+              // Update the breakdown request status if RequestID exists
+              if (invoiceDetails.RequestID) {
+                const updateBreakdownQuery = `
+                  UPDATE BreakdownRequests 
+                  SET Status = 'Paid' 
+                  WHERE RequestID = ? AND InvoiceID = ?
+                `;
+                
+                db.query(updateBreakdownQuery, [invoiceDetails.RequestID, InvoiceID], (breakdownErr, breakdownResult) => {
+                  if (breakdownErr) {
+                    return db.rollback(() => {
+                      console.error("Failed to update breakdown request:", breakdownErr);
+                      res.status(500).json({
+                        success: false,
+                        message: "Failed to update breakdown request status",
+                        error: breakdownErr.message
+                      });
+                    });
+                  }
+                  
+                  console.log(`Successfully updated breakdown request ${invoiceDetails.RequestID} status to Paid`);
+                  
+                  // Prepare notification data
+                  const { CustomerID, CustomerName, FirebaseToken, Total, RequestID } = invoiceDetails;
+                  
+                  // Ensure Total is treated as a number
+                  const totalAmount = typeof Total === 'number' ? Total : Number(Total || 0);
+                  
+                  const notificationTitle = 'Payment Confirmed';
+                  const notificationBody = `Dear ${CustomerName}, your payment of LKR ${totalAmount.toFixed(2)} for breakdown service invoice #${InvoiceID} has been received. Thank you!`;
+                  
+                  console.log("Preparing notification with message:", notificationBody);
+                  let notificationSent = false;
+                  
+                  // Commit the transaction
+                  db.commit(async (commitErr) => {
+                    if (commitErr) {
+                      return db.rollback(() => {
+                        console.error("Error committing transaction:", commitErr);
+                        res.status(500).json({
+                          success: false,
+                          message: "Failed to commit transaction",
+                          error: commitErr.message
+                        });
+                      });
+                    }
+                    
+                    // Send FCM notification if token exists
+                    if (FirebaseToken) {
+                      console.log(`Attempting to send FCM notification to token: ${FirebaseToken.substring(0, 10)}...`);
+                      
+                      const notificationMessage = {
+                        notification: {
+                          title: notificationTitle,
+                          body: notificationBody,
+                        },
+                        data: {
+                          invoiceID: InvoiceID,
+                          type: 'payment_confirmation',
+                          amount: totalAmount.toString(),
+                          requestID: RequestID || ''
+                        },
+                        token: FirebaseToken,
+                      };
+
+                      try {
+                        await messaging.send(notificationMessage);
+                        console.log("FCM notification sent successfully for payment confirmation!");
+                        notificationSent = true;
+                      } catch (notificationError) {
+                        console.error("Error sending FCM notification:", notificationError);
+                        console.error("Error details:", notificationError.errorInfo || notificationError.message);
+                      }
+                    } else {
+                      console.log("No Firebase token available for customer. Skipping FCM notification.");
+                    }
+                    
+                    // Store notification in database regardless of FCM success
+                    try {
+                      console.log("Generating notification ID for database storage");
+                      const notificationID = await generateNotificationId();
+                      
+                      const insertNotificationQuery = `
+                        INSERT INTO notifications 
+                        (notification_id, CustomerID, title, message, notification_type, icon_type, color_code, is_read, created_at, navigate_id)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, FALSE, CURRENT_TIMESTAMP, ?)`;
+
+                      console.log("Storing notification in database with ID:", notificationID);
+                      
+                      await new Promise((resolve, reject) => {
+                        db.query(
+                          insertNotificationQuery,
+                          [
+                            notificationID,
+                            CustomerID,
+                            notificationTitle,
+                            notificationBody,
+                            'Payment Confirmed',
+                            'payment',
+                            '#4CAF50', // Green color for success
+                            InvoiceID // navigate_id (InvoiceID)
+                          ],
+                          (err, result) => {
+                            if (err) {
+                              console.error("Error storing payment notification in DB:", err);
+                              return reject(err);
+                            }
+                            console.log("Notification stored successfully in database");
+                            resolve(result);
+                          }
+                        );
+                      });
+                      
+                      // Return success response with notification details
+                      console.log("Sending success response to client");
+                      return res.status(200).json({
+                        success: true,
+                        message: "Breakdown invoice marked as paid successfully and notification sent",
+                        invoiceId: InvoiceID,
+                        requestId: RequestID,
+                        notificationSent,
+                        notificationID
+                      });
+                      
+                    } catch (dbNotificationErr) {
+                      console.error("Failed to store payment notification in DB:", dbNotificationErr);
+                      
+                      // Still return success for the payment, even if notification storage failed
+                      return res.status(200).json({
+                        success: true,
+                        message: "Breakdown invoice marked as paid successfully but failed to store notification",
+                        invoiceId: InvoiceID,
+                        requestId: RequestID,
+                        notificationSent
+                      });
+                    }
+                  });
+                });
+              } else {
+                // No RequestID associated with this invoice
+                // Commit the transaction and return success
+                db.commit(async (commitErr) => {
+                  if (commitErr) {
+                    return db.rollback(() => {
+                      console.error("Error committing transaction:", commitErr);
+                      res.status(500).json({
+                        success: false,
+                        message: "Failed to commit transaction",
+                        error: commitErr.message
+                      });
+                    });
+                  }
+                  
+                  console.log("Sending success response to client (no breakdown request to update)");
+                  return res.status(200).json({
+                    success: true,
+                    message: "Invoice marked as paid successfully",
+                    invoiceId: InvoiceID
+                  });
+                });
+              }
+            });
+          });
         });
       }
-      
-      // Update the invoice status to "Paid" and set the payment method to "Cash"
-      const updateQuery = `
-        UPDATE Invoice 
-        SET PaymentMethod = 'Cash',
-            PaidStatus = 'Paid',
-            PaymentDate = CURRENT_TIMESTAMP,
-            GeneratedBy = ?
-        WHERE Invoice_ID = ?
-      `;
-      
-      db.query(updateQuery, [cashierId, InvoiceID], async (updateErr, updateResult) => {
-        if (updateErr) {
-          console.error("Database error updating invoice:", updateErr);
-          return res.status(500).json({
-            success: false,
-            message: "Failed to update invoice payment status",
-            error: updateErr.message
-          });
-        }
-        
-        if (updateResult.affectedRows === 0) {
-          console.log(`No rows affected when updating invoice ${InvoiceID}`);
-          return res.status(404).json({
-            success: false,
-            message: "Invoice not found or already paid"
-          });
-        }
-        
-        console.log(`Successfully marked invoice ${InvoiceID} as paid`);
-        
-        // Prepare notification data
-        const { CustomerID, CustomerName, FirebaseToken, Total, JobCardID, VehicleID } = invoiceDetails;
-        
-        // Ensure Total is treated as a number
-        const totalAmount = typeof Total === 'number' ? Total : Number(Total || 0);
-        
-        const notificationTitle = 'Payment Confirmed';
-        const notificationBody = `Dear ${CustomerName}, your payment of LKR ${totalAmount.toFixed(2)} for invoice #${InvoiceID} has been received. Thank you!`;
-        
-        console.log("Preparing notification with message:", notificationBody);
-        let notificationSent = false;
-        
-        // Send FCM notification if token exists
-        if (FirebaseToken) {
-          console.log(`Attempting to send FCM notification to token: ${FirebaseToken.substring(0, 10)}...`);
-          
-          const notificationMessage = {
-            notification: {
-              title: notificationTitle,
-              body: notificationBody,
-            },
-            data: {
-              invoiceID: InvoiceID,
-              type: 'payment_confirmation',
-              amount: totalAmount.toString(),
-              jobCardID: JobCardID || '',
-              vehicleID: VehicleID || ''
-            },
-            token: FirebaseToken,
-          };
-
-          try {
-            await messaging.send(notificationMessage);
-            console.log("FCM notification sent successfully for payment confirmation!");
-            notificationSent = true;
-          } catch (notificationError) {
-            console.error("Error sending FCM notification:", notificationError);
-            console.error("Error details:", notificationError.errorInfo || notificationError.message);
-          }
-        } else {
-          console.log("No Firebase token available for customer. Skipping FCM notification.");
-        }
-        
-        // Store notification in database regardless of FCM success
-        try {
-          console.log("Generating notification ID for database storage");
-          const notificationID = await generateNotificationId();
-          
-          const insertNotificationQuery = `
-            INSERT INTO notifications 
-            (notification_id, CustomerID, title, message, notification_type, icon_type, color_code, is_read, created_at, navigate_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, FALSE, CURRENT_TIMESTAMP, ?)`;
-
-          console.log("Storing notification in database with ID:", notificationID);
-          
-          await new Promise((resolve, reject) => {
-            db.query(
-              insertNotificationQuery,
-              [
-                notificationID,
-                CustomerID,
-                notificationTitle,
-                notificationBody,
-                'Payment Confirmed',
-                'payment',
-                '#4CAF50', // Green color for success
-                InvoiceID // navigate_id (InvoiceID)
-              ],
-              (err, result) => {
-                if (err) {
-                  console.error("Error storing payment notification in DB:", err);
-                  return reject(err);
-                }
-                console.log("Notification stored successfully in database");
-                resolve(result);
-              }
-            );
-          });
-          
-          // Return success response with notification details
-          console.log("Sending success response to client");
-          return res.status(200).json({
-            success: true,
-            message: "Invoice marked as paid successfully and notification sent",
-            invoiceId: InvoiceID,
-            notificationSent,
-            notificationID
-          });
-          
-        } catch (dbNotificationErr) {
-          console.error("Failed to store payment notification in DB:", dbNotificationErr);
-          
-          // Still return success for the payment, even if notification storage failed
-          return res.status(200).json({
-            success: true,
-            message: "Invoice marked as paid successfully but failed to store notification",
-            invoiceId: InvoiceID,
-            notificationSent
-          });
-        }
-      });
     });
     
   } catch (error) {
@@ -1746,6 +2086,8 @@ router.put("/confirm-cash-payment/:InvoiceID", authenticateToken, authorizeRoles
     });
   }
 });
+
+
 
 
 
@@ -1936,60 +2278,104 @@ router.post("/create-invoice/:JobCardID", authenticateToken, authorizeRoles(["Ad
 
 
 router.get("/pending-invoices", authenticateToken, authorizeRoles(['Cashier']), async (req, res) => {
-    try {
-      // Modified query to get ALL pending invoices without customer filter
-      const query = `
-        SELECT 
-          i.Invoice_ID, 
-          i.Total, 
-          i.Parts_Cost, 
-          i.Labour_Cost, 
-          i.GeneratedDate,
-          i.PaidStatus, 
-          j.JobCardID, 
-          a.AppointmentID, 
-          v.VehicleNo, 
-          v.Model,
-          c.FirstName, 
-          c.SecondName,
-          c.CustomerID,
-          c.Telephone
-        FROM Invoice i
-        INNER JOIN JobCards j ON i.JobCard_ID = j.JobCardID
-        INNER JOIN Appointments a ON j.AppointmentID = a.AppointmentID
-        INNER JOIN Vehicles v ON a.VehicleID = v.VehicleNo
-        INNER JOIN Customers c ON a.CustomerID = c.CustomerID
-        WHERE i.PaidStatus = 'Pending' AND i.PaymentMethod="Cash"
-        ORDER BY i.GeneratedDate DESC
-      `;
+  try {
+    // Query for regular service invoices
+    const regularInvoicesQuery = `
+      SELECT 
+        i.Invoice_ID, 
+        i.Total, 
+        i.Parts_Cost, 
+        i.Labour_Cost, 
+        i.GeneratedDate,
+        i.PaidStatus, 
+        j.JobCardID, 
+        a.AppointmentID, 
+        v.VehicleNo, 
+        v.Model,
+        c.FirstName, 
+        c.SecondName,
+        c.CustomerID,
+        c.Telephone,
+        'service' as invoiceType
+      FROM Invoice i
+      INNER JOIN JobCards j ON i.JobCard_ID = j.JobCardID
+      INNER JOIN Appointments a ON j.AppointmentID = a.AppointmentID
+      INNER JOIN Vehicles v ON a.VehicleID = v.VehicleNo
+      INNER JOIN Customers c ON a.CustomerID = c.CustomerID
+      WHERE i.PaidStatus = 'Pending' AND i.PaymentMethod = 'Cash'
+    `;
+    
+    // Query for breakdown service invoices
+    const breakdownInvoicesQuery = `
+      SELECT 
+        i.Invoice_ID, 
+        i.Total, 
+        i.Parts_Cost, 
+        i.Labour_Cost, 
+        i.GeneratedDate,
+        i.PaidStatus,
+        NULL as JobCardID,
+        NULL as AppointmentID,
+        NULL as VehicleNo,
+        NULL as Model,
+        c.FirstName,
+        c.SecondName,
+        c.CustomerID,
+        c.Telephone,
+        br.RequestID,
+        br.Description,
+        'breakdown' as invoiceType
+      FROM Invoice i
+      INNER JOIN BreakdownRequests br ON br.InvoiceID = i.Invoice_ID
+      INNER JOIN Customers c ON br.CustomerID = c.CustomerID
+      WHERE i.PaidStatus = 'Pending' AND i.PaymentMethod = 'Cash'
+    `;
+    
+    db.query(regularInvoicesQuery, [], (err1, regularResults) => {
+      if (err1) {
+        console.error("Database error for regular invoices:", err1);
+        return res.status(500).json({
+          success: false,
+          message: "Failed to fetch regular pending invoices",
+          error: err1.message
+        });
+      }
       
-      db.query(query, [], (err, results) => {
-        if (err) {
-          console.error("Database error:", err);
+      db.query(breakdownInvoicesQuery, [], (err2, breakdownResults) => {
+        if (err2) {
+          console.error("Database error for breakdown invoices:", err2);
           return res.status(500).json({
             success: false,
-            message: "Failed to fetch pending invoices",
-            error: err.message
+            message: "Failed to fetch breakdown pending invoices",
+            error: err2.message
           });
         }
         
+        // Combine both results
+        const allResults = [...regularResults, ...breakdownResults];
+        
+        // Sort by generated date (newest first)
+        allResults.sort((a, b) => new Date(b.GeneratedDate) - new Date(a.GeneratedDate));
+        
         return res.status(200).json({
           success: true,
-          message: results.length > 0 ? "Pending invoices retrieved successfully" : "No pending invoices found",
-          count: results.length,
-          data: results
+          message: allResults.length > 0 ? "Pending invoices retrieved successfully" : "No pending invoices found",
+          count: allResults.length,
+          data: allResults
         });
       });
-      
-    } catch (error) {
-      console.error("Error fetching pending invoices:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Failed to fetch pending invoices",
-        error: error.message
-      });
-    }
-  });
+    });
+    
+  } catch (error) {
+    console.error("Error fetching pending invoices:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch pending invoices",
+      error: error.message
+    });
+  }
+});
+
   
 
 

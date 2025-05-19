@@ -6,11 +6,22 @@ const { validateEmail, validatePhoneNumber } = require("../validations");
 const jwt = require("jsonwebtoken");
 const{authenticateToken,authorizeRoles}=require("../utilities")
 const admin=require("firebase-admin");
+const nodemailer = require('nodemailer');
+const crypto = require('crypto');
+const { v4: uuidv4 } = require('uuid');
 const router = express.Router();
 
 router.use((req, res, next) => {
     console.log("Customer Route Hit:", req.method, req.url);
     next();
+});
+
+const transporter = nodemailer.createTransport({
+  service: 'gmail', // Replace with your email service
+  auth: {
+    user: process.env.EMAIL_USER, // Use environment variables
+    pass: process.env.EMAIL_PASSWORD,
+  },
 });
 
 router.post("/customer-signup", async (req, res) => {
@@ -1539,7 +1550,7 @@ router.put("/update-payment-status/:InvoiceID", authenticateToken, authorizeRole
         // Also update the JobCard status
         const updateJobCardQuery = `
           UPDATE JobCards 
-          SET Status = 'Finished' 
+          SET Status = 'Paid' 
           WHERE JobCardID = (
             SELECT JobCard_ID FROM Invoice WHERE Invoice_ID = ?
           )
@@ -1668,7 +1679,7 @@ router.post("/payhere-notify", async (req, res) => {
 
 
 
-  router.get("/paid-invoices", authenticateToken, async (req, res) => {
+router.get("/paid-invoices", authenticateToken, async (req, res) => {
     try {
       const customerId = req.user.customerId; // Assuming the customer ID is stored in the token
       
@@ -1710,11 +1721,558 @@ router.post("/payhere-notify", async (req, res) => {
         error: error.message
       });
     }
-  });
-  
-  
+});
 
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    console.log(`Received password reset request for email: ${email}`);
+
+    if (!email) {
+      console.log('Email is missing in request body');
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required',
+      });
+    }
+
+    // Check if email exists in the database
+    const query = `
+      SELECT CustomerID, FirstName, Email FROM Customers 
+      WHERE Email = ?
+      UNION
+      SELECT EmployeeID, Name as FirstName, Email FROM Employees
+      WHERE Email = ?
+    `;
+
+    console.log(`Executing query to find user with email: ${email}`);
+    db.query(query, [email, email], async (err, results) => {
+      if (err) {
+        console.error('Database error when searching for email:', err);
+        return res.status(500).json({
+          success: false,
+          message: 'Database error occurred',
+          error: err.message
+        });
+      }
+
+      if (results.length === 0) {
+        console.log(`No user found with email: ${email}`);
+        return res.status(404).json({
+          success: false,
+          message: 'No account found with this email address',
+        });
+      }
+
+      const user = results[0];
+      console.log(`User found: ${JSON.stringify(user)}`);
+      
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      const tokenExpiry = new Date();
+      tokenExpiry.setHours(tokenExpiry.getHours() + 1); // Token valid for 1 hour
+      
+      console.log(`Generated reset token: ${resetToken.substring(0, 10)}... (expires: ${tokenExpiry})`);
+
+      // Store the reset token in the database
+      const resetId = uuidv4();
+      const insertTokenQuery = `
+        INSERT INTO PasswordResetTokens (
+          ResetID, UserID, Token, ExpiryDate, IsUsed
+        ) VALUES (?, ?, ?, ?, 0)
+      `;
+
+      console.log(`Storing reset token in database for user ID: ${user.CustomerID || user.EmployeeID}`);
+      db.query(
+        insertTokenQuery,
+        [resetId, user.CustomerID || user.EmployeeID, resetToken, tokenExpiry],
+        async (tokenErr) => {
+          if (tokenErr) {
+            console.error('Error storing reset token in database:', tokenErr);
+            return res.status(500).json({
+              success: false,
+              message: 'Failed to generate reset token',
+              error: tokenErr.message
+            });
+          }
+
+          // Generate reset link
+          const resetLink = `${process.env.PASSWORD_RESET_URL}/reset-password?token=${resetToken}`;
+          console.log(`Generated reset link: ${resetLink}`);
+
+          // Send email
+          const mailOptions = {
+            from: process.env.EMAIL_USER,
+            to: email,
+            subject: 'Password Reset - Rukmal Motors',
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background-color: #944EF8; padding: 20px; text-align: center;">
+                  <h1 style="color: white; margin: 0;">Password Reset</h1>
+                </div>
+                <div style="padding: 20px; border: 1px solid #ddd; border-top: none;">
+                  <p>Hello ${user.FirstName},</p>
+                  <p>We received a request to reset your password. Click the button below to create a new password:</p>
+                  <div style="text-align: center; margin: 30px 0;">
+                    <a href="${resetLink}" style="background-color: #944EF8; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold;">Reset Password</a>
+                  </div>
+                  <p>This link will expire in 1 hour.</p>
+                  <p>If you didn't request a password reset, you can ignore this email.</p>
+                  <p>Regards,<br>Rukmal Motors Team</p>
+                </div>
+                <div style="background-color: #f4f4f4; padding: 15px; text-align: center; font-size: 12px; color: #666;">
+                  <p>This is an automated email. Please do not reply.</p>
+                </div>
+              </div>
+            `,
+          };
+
+          console.log(`Attempting to send email to: ${email} using ${process.env.EMAIL_USER}`);
+          try {
+            await transporter.sendMail(mailOptions);
+            console.log(`Email sent successfully to: ${email}`);
+            
+            return res.status(200).json({
+              success: true,
+              message: 'Password reset instructions sent to your email',
+            });
+          } catch (emailErr) {
+            console.error('Error sending email:', emailErr);
+            return res.status(500).json({
+              success: false,
+              message: 'Failed to send reset email',
+              error: emailErr.message
+            });
+          }
+        }
+      );
+    });
+  } catch (error) {
+    console.error('Error in forgot password:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
+
+// Reset password endpoint
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token and new password are required',
+      });
+    }
+
+    // Check if token exists and is valid
+    const tokenQuery = `
+      SELECT * FROM PasswordResetTokens 
+      WHERE Token = ? AND ExpiryDate > NOW() AND IsUsed = 0
+    `;
+
+    db.query(tokenQuery, [token], async (err, results) => {
+      if (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({
+          success: false,
+          message: 'Database error occurred',
+          error: err.message
+        });
+      }
+
+      if (results.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid or expired token',
+        });
+      }
+
+      const resetToken = results[0];
+      const userId = resetToken.UserID;
+
+      // Hash the new password
+      const bcrypt = require('bcrypt');
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+      // Determine if user is customer or employee
+      const userTypeQuery = `
+        SELECT 'customer' as userType FROM Customers WHERE CustomerID = ?
+        UNION
+        SELECT 'employee' as userType FROM Employees WHERE EmployeeID = ?
+      `;
+
+      db.query(userTypeQuery, [userId, userId], async (userTypeErr, userTypeResults) => {
+        if (userTypeErr || userTypeResults.length === 0) {
+          console.error('Error determining user type:', userTypeErr);
+          return res.status(500).json({
+            success: false,
+            message: 'Failed to identify user account',
+            error: userTypeErr ? userTypeErr.message : 'User not found'
+          });
+        }
+
+        const userType = userTypeResults[0].userType;
+        const table = userType === 'customer' ? 'Customers' : 'Employees';
+        const idField = userType === 'customer' ? 'CustomerID' : 'EmployeeID';
+
+        // Update password
+        const updateQuery = `UPDATE ${table} SET Password = ? WHERE ${idField} = ?`;
+
+        db.query(updateQuery, [hashedPassword, userId], async (updateErr) => {
+          if (updateErr) {
+            console.error('Error updating password:', updateErr);
+            return res.status(500).json({
+              success: false,
+              message: 'Failed to update password',
+              error: updateErr.message
+            });
+          }
+
+          // Mark token as used
+          const markTokenQuery = `UPDATE PasswordResetTokens SET IsUsed = 1 WHERE Token = ?`;
+
+          db.query(markTokenQuery, [token], async (markErr) => {
+            if (markErr) {
+              console.error('Error marking token as used:', markErr);
+              // Continue anyway since password was updated
+            }
+
+            return res.status(200).json({
+              success: true,
+              message: 'Password has been reset successfully',
+            });
+          });
+        });
+      });
+    });
+  } catch (error) {
+    console.error('Error in reset password:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
   
+  
+router.get("/customer-invoice/:id", authenticateToken, authorizeRoles(['Customer']), async (req, res) => {
+  try {
+    const invoiceId = req.params.id;
+    const customerId = req.user.customerId;
+
+    console.log(`Fetching invoice ${invoiceId} for customer ${customerId}`);
+
+    // Query to get invoice details for regular service invoices
+    const regularInvoiceQuery = `
+      SELECT i.Invoice_ID, i.Total, i.Parts_Cost, i.Labour_Cost, i.GeneratedDate, i.PaidStatus, i.PaymentMethod, i.PaymentDate, i.Notes,
+             jc.JobCardID, jc.ServiceDetails, jc.Status as JobCardStatus, jc.ServiceMilleage,
+             a.AppointmentID, a.Date as AppointmentDate, a.Time as AppointmentTime, a.Status as AppointmentStatus,
+             v.VehicleNo, v.Model, v.Type as VehicleType, v.CurrentMilleage, v.NextServiceMilleage,
+             c.CustomerID, c.FirstName, c.SecondName, c.Telephone, c.Email,
+             e.Name as GeneratedByName, e.Role as GeneratedByRole
+      FROM Invoice i
+      INNER JOIN JobCards jc ON i.JobCard_ID = jc.JobCardID
+      INNER JOIN Appointments a ON jc.AppointmentID = a.AppointmentID
+      INNER JOIN Vehicles v ON a.VehicleID = v.VehicleNo
+      INNER JOIN Customers c ON a.CustomerID = c.CustomerID
+      LEFT JOIN Employees e ON i.GeneratedBy = e.EmployeeID
+      WHERE i.Invoice_ID = ? AND c.CustomerID = ?
+    `;
+
+    // Query to get invoice details for breakdown service invoices
+    const breakdownInvoiceQuery = `
+      SELECT i.Invoice_ID, i.Total, i.Parts_Cost, i.Labour_Cost, i.GeneratedDate, i.PaidStatus, i.PaymentMethod, i.PaymentDate, i.Notes,
+             br.RequestID, br.Description as BreakdownDescription, br.ContactName, br.ContactPhone, br.Status as BreakdownStatus, 
+             br.RequestTime, br.CompletedTime, br.Latitude, br.Longitude,
+             c.CustomerID, c.FirstName, c.SecondName, c.Telephone, c.Email,
+             e.Name as GeneratedByName, e.Role as GeneratedByRole,
+             d.Name as DriverName, d.Phone as DriverPhone
+      FROM Invoice i
+      INNER JOIN BreakdownRequests br ON br.InvoiceID = i.Invoice_ID
+      INNER JOIN Customers c ON br.CustomerID = c.CustomerID
+      LEFT JOIN Employees e ON i.GeneratedBy = e.EmployeeID
+      LEFT JOIN Employees d ON br.DriverID = d.EmployeeID
+      WHERE i.Invoice_ID = ? AND c.CustomerID = ?
+    `;
+
+    // First try to get regular invoice
+    db.query(regularInvoiceQuery, [invoiceId, customerId], (err, regularResults) => {
+      if (err) {
+        console.error("Database error fetching regular invoice:", err);
+        return res.status(500).json({
+          success: false,
+          message: "Database error",
+          error: err.message
+        });
+      }
+
+      if (regularResults.length > 0) {
+        // Found regular invoice - get service records and parts used
+        const serviceRecordsQuery = `
+          SELECT sr.ServiceRecord_ID, sr.Description, sr.ServiceType, sr.Status,
+                 s.ServiceName, s.Price
+          FROM ServiceRecords sr
+          LEFT JOIN Services s ON sr.ServiceType = s.ServiceID
+          WHERE sr.JobCardID = ?
+        `;
+
+        const partsUsedQuery = `
+          SELECT pu.PartID, pu.Quantity, pu.UnitPrice, pu.TotalPrice,
+                 p.Name as PartName, p.Description as PartDescription
+          FROM Parts_Used pu
+          JOIN Parts p ON pu.PartID = p.PartID
+          WHERE pu.InvoiceID = ?
+        `;
+
+        const mechanicsQuery = `
+          SELECT e.EmployeeID, e.Name, e.Role
+          FROM Mechanics_Assigned ma
+          JOIN Employees e ON ma.EmployeeID = e.EmployeeID
+          WHERE ma.JobCardID = ?
+        `;
+
+        // Get service records
+        db.query(serviceRecordsQuery, [regularResults[0].JobCardID], (srErr, serviceRecords) => {
+          if (srErr) {
+            console.error("Error fetching service records:", srErr);
+          }
+
+          // Get parts used
+          db.query(partsUsedQuery, [invoiceId], (puErr, partsUsed) => {
+            if (puErr) {
+              console.error("Error fetching parts used:", puErr);
+            }
+
+            // Get mechanics assigned
+            db.query(mechanicsQuery, [regularResults[0].JobCardID], (mechErr, mechanics) => {
+              if (mechErr) {
+                console.error("Error fetching mechanics:", mechErr);
+              }
+
+              // Return all data
+              return res.status(200).json({
+                success: true,
+                invoiceType: 'service',
+                data: {
+                  invoice: regularResults[0],
+                  serviceRecords: serviceRecords || [],
+                  partsUsed: partsUsed || [],
+                  mechanics: mechanics || []
+                }
+              });
+            });
+          });
+        });
+      } else {
+        // Try to get breakdown invoice
+        db.query(breakdownInvoiceQuery, [invoiceId, customerId], (err2, breakdownResults) => {
+          if (err2) {
+            console.error("Database error fetching breakdown invoice:", err2);
+            return res.status(500).json({
+              success: false,
+              message: "Database error",
+              error: err2.message
+            });
+          }
+
+          if (breakdownResults.length > 0) {
+            // Found breakdown invoice
+            return res.status(200).json({
+              success: true,
+              invoiceType: 'breakdown',
+              data: breakdownResults[0]
+            });
+          } else {
+            // Invoice not found
+            return res.status(404).json({
+              success: false,
+              message: "Invoice not found for this customer"
+            });
+          }
+        });
+      }
+    });
+
+  } catch (error) {
+    console.error("Error in customer invoice API:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message
+    });
+  }
+});
+
+
+
+router.get("/vehicle-cost", authenticateToken, authorizeRoles(['Customer']), async (req, res) => {
+  try {
+    const customerId = req.user.customerId;
+    
+    console.log(`Fetching vehicle cost details for customer: ${customerId}`);
+    
+    // Query to get total cost spent on each vehicle (including image URLs)
+    const query = `
+      SELECT 
+        v.VehicleNo,
+        v.Model,
+        v.Type,
+        
+        v.VehiclePicUrl,
+        COUNT(DISTINCT i.Invoice_ID) as ServiceCount,
+        SUM(i.Total) as TotalCost,
+        SUM(i.Parts_Cost) as PartsCost,
+        SUM(i.Labour_Cost) as LabourCost,
+        MAX(i.GeneratedDate) as LastServiceDate
+      FROM Vehicles v
+      LEFT JOIN Appointments a ON v.VehicleNo = a.VehicleID
+      LEFT JOIN JobCards j ON a.AppointmentID = j.AppointmentID
+      LEFT JOIN Invoice i ON j.JobCardID = i.JobCard_ID
+      WHERE v.CustomerID = ? AND i.PaidStatus = 'Paid'
+      GROUP BY v.VehicleNo, v.Model, v.Type,v.VehiclePicUrl
+      ORDER BY TotalCost DESC
+    `;
+    
+    // Execute query
+    db.query(query, [customerId], (err, vehicleResults) => {
+      if (err) {
+        console.error("Database error fetching vehicle costs:", err);
+        return res.status(500).json({
+          success: false,
+          message: "Failed to fetch vehicle costs",
+          error: err.message
+        });
+      }
+      
+      // Calculate overall totals
+      let totalServiceCount = 0;
+      let overallTotalCost = 0;
+      let overallPartsCost = 0;
+      let overallLabourCost = 0;
+      
+      // Process vehicle results
+      const vehicles = vehicleResults.map(vehicle => {
+        const totalCost = parseFloat(vehicle.TotalCost || 0);
+        const partsCost = parseFloat(vehicle.PartsCost || 0);
+        const labourCost = parseFloat(vehicle.LabourCost || 0);
+        const serviceCount = parseInt(vehicle.ServiceCount || 0);
+        
+        totalServiceCount += serviceCount;
+        overallTotalCost += totalCost;
+        overallPartsCost += partsCost;
+        overallLabourCost += labourCost;
+        
+        // Add default image URL if none exists
+        const imageURL = vehicle.VehiclePicUrl || getDefaultVehicleImage(vehicle.Model, vehicle.Type);
+        
+        return {
+          vehicleNo: vehicle.VehicleNo,
+          model: vehicle.Model,
+          type: vehicle.Type,
+
+          imageURL: imageURL,
+          serviceCount: serviceCount,
+          totalCost: totalCost,
+          partsCost: partsCost,
+          labourCost: labourCost,
+          lastServiceDate: vehicle.LastServiceDate
+        };
+      });
+      
+      // Get recent services
+      const recentServicesQuery = `
+        SELECT 
+          i.Invoice_ID, 
+          i.Total, 
+          i.GeneratedDate, 
+          v.VehicleNo, 
+          v.Model,
+          v.VehiclePicUrl
+        FROM Invoice i
+        JOIN JobCards j ON i.JobCard_ID = j.JobCardID
+        JOIN Appointments a ON j.AppointmentID = a.AppointmentID
+        JOIN Vehicles v ON a.VehicleID = v.VehicleNo
+        WHERE v.CustomerID = ? AND i.PaidStatus = 'Paid'
+        ORDER BY i.GeneratedDate DESC
+        LIMIT 5
+      `;
+      
+      db.query(recentServicesQuery, [customerId], (recentErr, recentServices) => {
+        if (recentErr) {
+          console.error("Database error fetching recent services:", recentErr);
+          // Continue anyway, just without recent services
+          return res.status(200).json({
+            success: true,
+            summary: {
+              totalVehicles: vehicles.length,
+              totalServiceCount: totalServiceCount,
+              overallTotalCost: overallTotalCost,
+              overallPartsCost: overallPartsCost,
+              overallLabourCost: overallLabourCost
+            },
+            vehicles: vehicles,
+            recentServices: []
+          });
+        }
+        
+        // Format recent services
+        const formattedRecentServices = recentServices.map(service => ({
+          invoiceId: service.Invoice_ID,
+          total: parseFloat(service.Total || 0),
+          date: service.GeneratedDate,
+          vehicleNo: service.VehicleNo,
+          model: service.Model,
+          imageURL: service.VehiclePicUrl || getDefaultVehicleImage(service.Model, service.Type)
+        }));
+        
+        // Return all data
+        return res.status(200).json({
+          success: true,
+          summary: {
+            totalVehicles: vehicles.length,
+            totalServiceCount: totalServiceCount,
+            overallTotalCost: overallTotalCost,
+            overallPartsCost: overallPartsCost,
+            overallLabourCost: overallLabourCost
+          },
+          vehicles: vehicles,
+          recentServices: formattedRecentServices
+        });
+      });
+    });
+  } catch (error) {
+    console.error("Error fetching vehicle costs:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message
+    });
+  }
+});
+
+// Helper function to get default vehicle image based on model and type
+function getDefaultVehicleImage(model, type) {
+  // Default image URL based on vehicle type
+  const defaultImages = {
+    'Sedan': 'https://your-domain.com/images/default-sedan.png',
+    'SUV': 'https://your-domain.com/images/default-suv.png',
+    'Truck': 'https://your-domain.com/images/default-truck.png',
+    'Van': 'https://your-domain.com/images/default-van.png',
+    'Coupe': 'https://your-domain.com/images/default-coupe.png',
+    'Hatchback': 'https://your-domain.com/images/default-hatchback.png'
+  };
+  
+  // Return type-specific default image or generic default
+  return defaultImages[type] || 'https://your-domain.com/images/default-car.png';
+}
+
+
+
   
   
 
