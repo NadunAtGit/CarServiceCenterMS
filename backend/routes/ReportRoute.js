@@ -89,6 +89,95 @@ router.get("/monthly-sales", authenticateToken, authorizeRoles(["Admin"]), (req,
     });
 });
 
+// In your backend routes file (e.g., routes/reports.js)
+// routes/reports.js
+router.get("/attendance", authenticateToken, (req, res) => {
+    const employeeId = req.user.EmployeeID; // Extract just the EmployeeID property
+    
+    // For debugging
+    console.log("Fetching attendance for employee:", employeeId);
+    
+    const query = `
+        SELECT 
+            AttendanceID, 
+            EmployeeID, 
+            Date, 
+            Status, 
+            ArrivalTime, 
+            DepartureTime,
+            isWorking
+        FROM Attendances
+        WHERE EmployeeID = ?
+        ORDER BY Date DESC
+        LIMIT 30
+    `;
+    
+    db.query(query, [employeeId], (err, results) => {
+        if (err) {
+            console.error("Error fetching attendance records:", err);
+            return res.status(500).json({ message: "Database error" });
+        }
+        
+        console.log(`Found ${results.length} attendance records`);
+        
+        // Calculate attendance statistics
+        const presentCount = results.filter(record => record.Status === 'Present').length;
+        const absentCount = results.filter(record => record.Status === 'Absent').length;
+        const lateCount = results.filter(record => {
+            if (record.Status !== 'Present') return false;
+            // Consider arrival after 9:15 AM as late
+            if (!record.ArrivalTime) return false;
+            
+            const arrivalTime = new Date(record.ArrivalTime);
+            const hours = arrivalTime.getHours();
+            const minutes = arrivalTime.getMinutes();
+            
+            return (hours > 9 || (hours === 9 && minutes > 15));
+        }).length;
+        
+        const currentDate = new Date();
+        
+        res.status(200).json({
+            success: true,
+            month: currentDate.toLocaleString('default', { month: 'long' }),
+            year: currentDate.getFullYear(),
+            attendanceRecords: results,
+            stats: {
+                present: presentCount,
+                absent: absentCount,
+                late: lateCount,
+                percentage: results.length ? Math.round((presentCount / results.length) * 100) : 0
+            }
+        });
+    });
+});
+
+
+
+router.get("/attendance", authenticateToken, async (req, res) => {
+  try {
+    const employeeId = req.user.id; // or req.user._id depending on your auth
+
+    // Get the current month start and end dates
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    const attendanceRecords = await Attendance.find({
+      employeeId: employeeId,
+      date: {
+        $gte: startOfMonth,
+        $lte: endOfMonth
+      }
+    });
+
+    res.status(200).json(attendanceRecords);
+  } catch (err) {
+    console.error("Error fetching attendance:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/this-month-sales", authenticateToken, authorizeRoles(["Admin"]), (req, res) => {
     const today = new Date();
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);

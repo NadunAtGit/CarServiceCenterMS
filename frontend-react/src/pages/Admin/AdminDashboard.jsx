@@ -12,7 +12,8 @@ const AdminDashboard = () => {
     totalEmployees: 0,
     totalServices: 0,
     salesGrowth: 0,
-    appointmentGrowth: 0
+    appointmentGrowth: 0,
+    servicesGrowth: 0, // Added for service growth percentage
   });
   const [topEmployees, setTopEmployees] = useState([]);
   const [monthlySales, setMonthlySales] = useState([]);
@@ -175,6 +176,8 @@ const AdminDashboard = () => {
         setServiceDistribution([]);
       }
 
+
+
       // Mock top employees data
       setTopEmployees([
         { id: 'EMP001', name: 'John Smith', role: 'Mechanic', performance: 95, revenue: 15200 },
@@ -184,6 +187,19 @@ const AdminDashboard = () => {
         { id: 'EMP014', name: 'Michael Brown', role: 'Advisor', performance: 86, revenue: 12100 }
       ]);
 
+      const serviceRecordsResponse = await axiosInstance.get('/api/reports/monthly-service-records');
+      console.log("Service Records Data:", serviceRecordsResponse.data);
+      
+      if (serviceRecordsResponse.data && serviceRecordsResponse.data.success) {
+        const serviceCount = parseInt(serviceRecordsResponse.data.serviceCount);
+        const growth = serviceRecordsResponse.data.growthPercentage || 0;
+        
+        setDashboardData(prevData => ({
+          ...prevData,
+          totalServices: isNaN(serviceCount) ? 0 : serviceCount,
+          servicesGrowth: growth
+        }));
+      }
       // Mock revenue by department
       // Inside fetchDashboardData function
 const departmentRevenueResponse = await axiosInstance.get('/api/reports/department-revenue');
@@ -296,13 +312,24 @@ if (departmentRevenueResponse.data.success && Array.isArray(departmentRevenueRes
             </div>
 
             {/* Total Services Card */}
-            <div className="bg-white/70 backdrop-blur-xl rounded-xl border border-[#944EF8]/10 p-5 shadow-md hover:shadow-lg transition-all duration-300">
+             <div className="bg-white/70 backdrop-blur-xl rounded-xl border border-[#944EF8]/10 p-5 shadow-md hover:shadow-lg transition-all duration-300">
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="text-gray-500 text-sm font-medium">Services</p>
-                  <h3 className="text-2xl font-bold text-gray-800 mt-1">{dashboardData.totalServices}</h3>
+                  <p className="text-gray-500 text-sm font-medium">Services <span className="text-xs">({new Date().toLocaleString('default', { month: 'long' })} 2025)</span></p>
+                  <h3 className="text-2xl font-bold text-gray-800 mt-1">{dashboardData.totalServices.toLocaleString()}</h3>
                   <div className="flex items-center mt-2">
-                    <span className="text-gray-500 text-xs">Total services completed</span>
+                    {dashboardData.servicesGrowth > 0 ? (
+                      <>
+                        <AiOutlineRise className="text-green-500" />
+                        <span className="text-green-500 text-sm ml-1">{dashboardData.servicesGrowth}%</span>
+                      </>
+                    ) : dashboardData.servicesGrowth < 0 ? (
+                      <>
+                        <AiOutlineFall className="text-red-500" />
+                        <span className="text-red-500 text-sm ml-1">{Math.abs(dashboardData.servicesGrowth)}%</span>
+                      </>
+                    ) : null}
+                    <span className="text-gray-500 text-xs ml-2">vs last month</span>
                   </div>
                 </div>
                 <div className="p-3 bg-[#944EF8]/10 rounded-lg">
@@ -311,6 +338,7 @@ if (departmentRevenueResponse.data.success && Array.isArray(departmentRevenueRes
               </div>
             </div>
           </div>
+          
 
           {/* Charts Row */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
@@ -323,7 +351,7 @@ if (departmentRevenueResponse.data.success && Array.isArray(departmentRevenueRes
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                       <XAxis dataKey="month" />
                       <YAxis 
-                        domain={[0, 500000]} // Set minimum to 0 and maximum to 500,000 (5 lakhs)
+                        domain={[0, 10000]} // Set minimum to 0 and maximum to 500,000 (5 lakhs)
                         tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} // Format as $Xk for readability
                       />
                       <Tooltip 

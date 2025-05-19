@@ -9,11 +9,14 @@ const EmployeeDashBoard = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [attendanceMarked, setAttendanceMarked] = useState(false);
   const [attendanceStats, setAttendanceStats] = useState({
-    present: 18,
-    absent: 2,
-    late: 3,
-    percentage: 90
+    present: 0,
+    absent: 0,
+    late: 0,
+    percentage: 0
   });
+  const [attendanceRecords, setAttendanceRecords] = useState([]);
+  const [timeFrame, setTimeFrame] = useState('This Month');
+  const [loading, setLoading] = useState(true);
 
   const getUserInfo = async () => {
     try {
@@ -27,13 +30,16 @@ const EmployeeDashBoard = () => {
           id: employee.EmployeeID,
           username: employee.Username,
           name: employee.Name,
-          email: employee.email,
+          email: employee.Email || employee.email,
           role: employee.Role,
           phone: employee.Phone,
           rating: employee.Rating,
           imageUrl: employee.ProfilePicUrl,
           department: employee.Department || employee.Role
         });
+        
+        // After getting user info, check today's attendance
+        checkTodayAttendance(employee.EmployeeID);
       } else {
         setFormError("Failed to retrieve employee information.");
       }
@@ -41,17 +47,83 @@ const EmployeeDashBoard = () => {
       console.error("Error fetching employee data:", error);
       if (error.response?.status === 401) {
         localStorage.clear();
+        // Redirect to login if needed
       } else {
         setFormError("An error occurred while fetching employee data.");
       }
     }
   };
 
+  const checkTodayAttendance = async (employeeId) => {
+    try {
+      const today = new Date().toISOString().split('T')[0]; // Format as YYYY-MM-DD
+      const response = await axiosInstance.get(`/api/admin/today-attendance?date=${today}`);
+      
+      if (response.data && response.data.success) {
+        if (response.data.attendance) {
+          setAttendanceStatus('You have already marked attendance for today');
+          setAttendanceMarked(true);
+          
+          // Check if employee has marked departure
+          if (response.data.attendance.DepartureTime) {
+            setAttendanceMarked(false);
+            setAttendanceStatus('You have completed your attendance for today');
+          } else if (response.data.attendance.isWorking) {
+            setAttendanceMarked(true);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error checking today's attendance:", error);
+    }
+  };
+
+  const getAttendanceRecords = async () => {
+    setLoading(true);
+    try {
+      const response = await axiosInstance.get('/api/reports/attendance');
+      console.log("Attendance API Response:", response.data);
+      
+      if (response.data && response.data.success) {
+        setAttendanceRecords(response.data.attendanceRecords);
+        
+        // Update stats if provided by API
+        if (response.data.stats) {
+          setAttendanceStats(response.data.stats);
+        } else {
+          // Calculate stats from records if not provided
+          const records = response.data.attendanceRecords;
+          const present = records.filter(r => r.Status === 'Present').length;
+          const absent = records.filter(r => r.Status === 'Absent').length;
+          const late = records.filter(r => {
+            if (!r.ArrivalTime) return false;
+            const arrival = new Date(r.ArrivalTime);
+            return arrival.getHours() >= 9 && arrival.getMinutes() > 15;
+          }).length;
+          
+          setAttendanceStats({
+            present,
+            absent,
+            late,
+            percentage: records.length ? Math.round((present / records.length) * 100) : 0
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching attendance records:", error);
+      setFormError("Failed to load attendance records.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const markAttendance = async () => {
     try {
-      const response = await axiosInstance.post('api/admin/mark-attendance', { status: 'Present' });
+      const response = await axiosInstance.post('/api/admin/mark-attendance', { status: 'Present' });
       setAttendanceStatus(response.data.message || 'Attendance marked successfully');
       setAttendanceMarked(true);
+      // Refresh attendance records
+      getAttendanceRecords();
     } catch (error) {
       console.error('Error marking attendance:', error);
       setAttendanceStatus('Failed to mark attendance.');
@@ -60,17 +132,35 @@ const EmployeeDashBoard = () => {
   
   const markDeparture = async () => {
     try {
-      const response = await axiosInstance.post('api/admin/mark-departure');
+      const response = await axiosInstance.post('/api/admin/mark-departure');
       setAttendanceStatus(response.data.message || 'Departure marked successfully');
       setAttendanceMarked(false);
+      // Refresh attendance records
+      getAttendanceRecords();
     } catch (error) {
       console.error('Error marking departure:', error);
       setAttendanceStatus('Failed to mark departure.');
     }
   };
 
+  // Format date to display in a more readable format
+  const formatDate = (dateString) => {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  };
+
+  // Format time to display in a more readable format
+  const formatTime = (timeString) => {
+    if (!timeString) return '-';
+    const date = new Date(timeString);
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  };
+
   useEffect(() => {
     getUserInfo();
+    getAttendanceRecords();
+    
     // Update time every minute
     const intervalId = setInterval(() => {
       setCurrentTime(new Date());
@@ -78,6 +168,16 @@ const EmployeeDashBoard = () => {
     
     return () => clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    // Get attendance records again when time frame changes
+    getAttendanceRecords();
+  }, [timeFrame]);
+
+  const handleLogout = () => {
+    localStorage.clear();
+    window.location.href = '/login';
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 text-gray-800">
@@ -93,7 +193,10 @@ const EmployeeDashBoard = () => {
               <p className="text-xs text-slate-500">{currentTime.toLocaleDateString()} | {currentTime.toLocaleTimeString()}</p>
             </div>
           </div>
-          <button className="bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 px-4 rounded-lg flex items-center gap-2 transition-all duration-300 text-sm font-medium">
+          <button 
+            onClick={handleLogout}
+            className="bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 px-4 rounded-lg flex items-center gap-2 transition-all duration-300 text-sm font-medium"
+          >
             <FaSignOutAlt /> Logout
           </button>
         </div>
@@ -101,6 +204,13 @@ const EmployeeDashBoard = () => {
 
       {/* Main Content */}
       <div className="container mx-auto px-4 py-6">
+        {/* Error Message if any */}
+        {formError && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+            {formError}
+          </div>
+        )}
+        
         {/* Top Section - Attendance Card */}
         <div className="mb-8">
           <div className="bg-white rounded-xl shadow-sm p-6 border border-slate-100">
@@ -252,56 +362,91 @@ const EmployeeDashBoard = () => {
             <div className="bg-white rounded-xl shadow-sm p-6 border border-slate-100 h-full">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-lg font-semibold text-slate-800">Attendance History</h2>
-                <select className="text-sm border border-slate-200 rounded-lg p-2 bg-slate-50">
+                <select 
+                  className="text-sm border border-slate-200 rounded-lg p-2 bg-slate-50"
+                  value={timeFrame}
+                  onChange={(e) => setTimeFrame(e.target.value)}
+                >
                   <option>This Month</option>
                   <option>Last Month</option>
                   <option>Last 3 Months</option>
                 </select>
               </div>
               
-              <div className="overflow-x-auto">
-                <table className="min-w-full bg-white">
-                  <thead>
-                    <tr className="bg-slate-50 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                      <th className="px-4 py-3 rounded-tl-lg">Date</th>
-                      <th className="px-4 py-3">Check In</th>
-                      <th className="px-4 py-3">Check Out</th>
-                      <th className="px-4 py-3 rounded-tr-lg">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {[
-                      { date: '2025-05-13', checkIn: '09:00 AM', checkOut: '05:30 PM', status: 'Present' },
-                      { date: '2025-05-12', checkIn: '09:15 AM', checkOut: '05:45 PM', status: 'Late' },
-                      { date: '2025-05-11', checkIn: '08:55 AM', checkOut: '05:30 PM', status: 'Present' },
-                      { date: '2025-05-10', checkIn: '09:00 AM', checkOut: '05:25 PM', status: 'Present' },
-                      { date: '2025-05-09', checkIn: '-', checkOut: '-', status: 'Absent' },
-                      { date: '2025-05-08', checkIn: '08:50 AM', checkOut: '05:30 PM', status: 'Present' },
-                    ].map((record, index) => (
-                      <tr key={index} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 text-sm font-medium text-slate-700">{record.date}</td>
-                        <td className="px-4 py-3 text-sm text-slate-600">{record.checkIn}</td>
-                        <td className="px-4 py-3 text-sm text-slate-600">{record.checkOut}</td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                            record.status === 'Present' ? 'bg-green-100 text-green-800' : 
-                            record.status === 'Absent' ? 'bg-red-100 text-red-800' : 
-                            'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {record.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              {loading ? (
+                <div className="flex justify-center items-center py-10">
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-700"></div>
+                </div>
+              ) : (
+                <>
+                  {attendanceRecords.length === 0 ? (
+                    <div className="text-center py-8 text-slate-500">
+                      No attendance records found for the selected period.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full bg-white">
+                        <thead>
+                          <tr className="bg-slate-50 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                            <th className="px-4 py-3 rounded-tl-lg">Date</th>
+                            <th className="px-4 py-3">Check In</th>
+                            <th className="px-4 py-3">Check Out</th>
+                            <th className="px-4 py-3 rounded-tr-lg">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {attendanceRecords.map((record, index) => {
+                            // Determine late status
+                            let isLate = false;
+                            if (record.ArrivalTime) {
+                              const arrivalTime = new Date(record.ArrivalTime);
+                              isLate = arrivalTime.getHours() >= 9 && arrivalTime.getMinutes() > 15;
+                            }
+                            
+                            // Update status label considering late arrival
+                            let displayStatus = record.Status;
+                            if (displayStatus === 'Present' && isLate) {
+                              displayStatus = 'Late';
+                            }
+                            
+                            return (
+                              <tr key={index} className="hover:bg-slate-50">
+                                <td className="px-4 py-3 text-sm font-medium text-slate-700">
+                                  {formatDate(record.Date)}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-slate-600">
+                                  {formatTime(record.ArrivalTime)}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-slate-600">
+                                  {formatTime(record.DepartureTime)}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                    displayStatus === 'Present' ? 'bg-green-100 text-green-800' : 
+                                    displayStatus === 'Absent' ? 'bg-red-100 text-red-800' : 
+                                    displayStatus === 'Late' ? 'bg-yellow-100 text-yellow-800' :
+                                    'bg-blue-100 text-blue-800'
+                                  }`}>
+                                    {displayStatus}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
+              )}
               
-              <div className="flex justify-center mt-6">
-                <button className="text-sm text-purple-600 font-medium hover:text-purple-800 transition-colors">
-                  View All Records
-                </button>
-              </div>
+              {attendanceRecords.length > 0 && (
+                <div className="flex justify-center mt-6">
+                  <button className="text-sm text-purple-600 font-medium hover:text-purple-800 transition-colors">
+                    View All Records
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
