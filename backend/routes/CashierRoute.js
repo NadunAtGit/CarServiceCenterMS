@@ -19,10 +19,10 @@ const upload = multer({ storage });
 const router = express.Router();
 
 
-router.use((req, res, next) => {
-    console.log("Admin Route Hit:", req.method, req.url);
-    next();
-});
+// router.use((req, res, next) => {
+//     console.log("Admin Route Hit:", req.method, req.url);
+//     next();
+// });
 
 
 // router.put("/approveorder/:orderid", authenticateToken, authorizeRoles(["Cashier"]), async (req, res) => {

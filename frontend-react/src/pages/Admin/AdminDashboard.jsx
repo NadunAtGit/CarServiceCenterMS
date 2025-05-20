@@ -351,7 +351,7 @@ if (departmentRevenueResponse.data.success && Array.isArray(departmentRevenueRes
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                       <XAxis dataKey="month" />
                       <YAxis 
-                        domain={[0, 10000]} // Set minimum to 0 and maximum to 500,000 (5 lakhs)
+                        domain={[0, 50000]} // Set minimum to 0 and maximum to 500,000 (5 lakhs)
                         tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} // Format as $Xk for readability
                       />
                       <Tooltip 

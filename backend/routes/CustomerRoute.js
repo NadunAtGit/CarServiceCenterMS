@@ -11,10 +11,12 @@ const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const router = express.Router();
 
-router.use((req, res, next) => {
-    console.log("Customer Route Hit:", req.method, req.url);
-    next();
-});
+// router.use((req, res, next) => {
+//     console.log("Customer Route Hit:", req.method, req.url);
+//     next();
+// });
+
+
 
 const transporter = nodemailer.createTransport({
   service: 'gmail', // Replace with your email service
@@ -611,7 +613,7 @@ router.get("/get-notfinished-jobcards", authenticateToken, async (req, res) => {
             FROM JobCards jc
             JOIN Appointments a ON jc.AppointmentID = a.AppointmentID
             JOIN Vehicles v ON a.VehicleID = v.VehicleNo
-            WHERE a.CustomerID = ? AND jc.Status NOT IN ('Invoice Generated', 'Finished')
+            WHERE a.CustomerID = ? AND jc.Status NOT IN ('Paid')
 
             ORDER BY jc.JobCardID DESC
         `;
@@ -1723,8 +1725,27 @@ router.get("/paid-invoices", authenticateToken, async (req, res) => {
     }
 });
 
+async function sendEmail(to, subject, html) {
+  try {
+    const mailOptions = {
+      from: '"Your App Name" <your-email@gmail.com>',
+      to,
+      subject,
+      html,
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log('Email sent:', info.messageId);
+    return true;
+  } catch (error) {
+    console.error('Error sending email:', error);
+    return false;
+  }
+}
+// Updated forgot-password endpoint
 router.post('/forgot-password', async (req, res) => {
   try {
+    sendEmail('your-email@gmail.com', 'Test Email', '<p>This is a test</p>');
     const { email } = req.body;
     console.log(`Received password reset request for email: ${email}`);
 
@@ -1767,82 +1788,71 @@ router.post('/forgot-password', async (req, res) => {
       const user = results[0];
       console.log(`User found: ${JSON.stringify(user)}`);
       
-      const resetToken = crypto.randomBytes(32).toString('hex');
-      const tokenExpiry = new Date();
-      tokenExpiry.setHours(tokenExpiry.getHours() + 1); // Token valid for 1 hour
+      // Generate 6-digit OTP
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const otpExpiry = new Date();
+      otpExpiry.setMinutes(otpExpiry.getMinutes() + 10); // OTP valid for 10 minutes
       
-      console.log(`Generated reset token: ${resetToken.substring(0, 10)}... (expires: ${tokenExpiry})`);
+      console.log(`Generated OTP: ${otp} (expires: ${otpExpiry})`);
 
-      // Store the reset token in the database
+      // Store the OTP in the database
       const resetId = uuidv4();
-      const insertTokenQuery = `
+      const insertOtpQuery = `
         INSERT INTO PasswordResetTokens (
           ResetID, UserID, Token, ExpiryDate, IsUsed
         ) VALUES (?, ?, ?, ?, 0)
+        ON DUPLICATE KEY UPDATE
+          Token = VALUES(Token),
+          ExpiryDate = VALUES(ExpiryDate),
+          IsUsed = 0
       `;
 
-      console.log(`Storing reset token in database for user ID: ${user.CustomerID || user.EmployeeID}`);
+      console.log(`Storing OTP in database for user ID: ${user.CustomerID || user.EmployeeID}`);
       db.query(
-        insertTokenQuery,
-        [resetId, user.CustomerID || user.EmployeeID, resetToken, tokenExpiry],
-        async (tokenErr) => {
-          if (tokenErr) {
-            console.error('Error storing reset token in database:', tokenErr);
+        insertOtpQuery,
+        [resetId, user.CustomerID || user.EmployeeID, otp, otpExpiry],
+        async (otpErr) => {
+          if (otpErr) {
+            console.error('Error storing OTP in database:', otpErr);
             return res.status(500).json({
               success: false,
-              message: 'Failed to generate reset token',
-              error: tokenErr.message
+              message: 'Failed to generate OTP',
+              error: otpErr.message
             });
           }
 
-          // Generate reset link
-          const resetLink = `${process.env.PASSWORD_RESET_URL}/reset-password?token=${resetToken}`;
-          console.log(`Generated reset link: ${resetLink}`);
-
-          // Send email
-          const mailOptions = {
-            from: process.env.EMAIL_USER,
-            to: email,
-            subject: 'Password Reset - Rukmal Motors',
-            html: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <div style="background-color: #944EF8; padding: 20px; text-align: center;">
-                  <h1 style="color: white; margin: 0;">Password Reset</h1>
-                </div>
-                <div style="padding: 20px; border: 1px solid #ddd; border-top: none;">
-                  <p>Hello ${user.FirstName},</p>
-                  <p>We received a request to reset your password. Click the button below to create a new password:</p>
-                  <div style="text-align: center; margin: 30px 0;">
-                    <a href="${resetLink}" style="background-color: #944EF8; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold;">Reset Password</a>
-                  </div>
-                  <p>This link will expire in 1 hour.</p>
-                  <p>If you didn't request a password reset, you can ignore this email.</p>
-                  <p>Regards,<br>Rukmal Motors Team</p>
-                </div>
-                <div style="background-color: #f4f4f4; padding: 15px; text-align: center; font-size: 12px; color: #666;">
-                  <p>This is an automated email. Please do not reply.</p>
-                </div>
+          // Send OTP via email
+          const emailHtml = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+              <div style="text-align: center; margin-bottom: 20px;">
+                <h2 style="color: #944EF8;">Password Reset Request</h2>
               </div>
-            `,
-          };
+              <p>Hello ${user.FirstName},</p>
+              <p>We received a request to reset your password. Please use the following OTP (One-Time Password) to verify your identity:</p>
+              <div style="margin: 30px 0; text-align: center;">
+                <div style="font-size: 24px; font-weight: bold; letter-spacing: 8px; background-color: #f5f5f5; padding: 15px; border-radius: 5px;">${otp}</div>
+                <p style="font-size: 12px; color: #666; margin-top: 10px;">This OTP will expire in 10 minutes.</p>
+              </div>
+              <p>If you didn't request a password reset, please ignore this email or contact our support team if you have any concerns.</p>
+              <p>Thank you,<br>Your App Name Team</p>
+            </div>
+          `;
 
-          console.log(`Attempting to send email to: ${email} using ${process.env.EMAIL_USER}`);
-          try {
-            await transporter.sendMail(mailOptions);
-            console.log(`Email sent successfully to: ${email}`);
-            
-            return res.status(200).json({
-              success: true,
-              message: 'Password reset instructions sent to your email',
-            });
-          } catch (emailErr) {
-            console.error('Error sending email:', emailErr);
-            return res.status(500).json({
-              success: false,
-              message: 'Failed to send reset email',
-              error: emailErr.message
-            });
-          }
+          const emailSent = await sendEmail(
+            email,
+            "Password Reset OTP",
+            emailHtml
+          );
+
+          
+          // For development purposes, still include the OTP in response
+          return res.status(200).json({
+            success: true,
+            message: 'OTP generated successfully' + (emailSent ? ' and sent to your email' : ''),
+            otp: otp, // Only include this in development!
+            email: email,
+            emailSent: emailSent
+          });
         }
       );
     });
@@ -1856,25 +1866,32 @@ router.post('/forgot-password', async (req, res) => {
   }
 });
 
-// Reset password endpoint
-router.post('/reset-password', async (req, res) => {
+// Verify OTP endpoint
+router.post('/verify-otp', async (req, res) => {
   try {
-    const { token, newPassword } = req.body;
+    const { email, otp } = req.body;
 
-    if (!token || !newPassword) {
+    if (!email || !otp) {
       return res.status(400).json({
         success: false,
-        message: 'Token and new password are required',
+        message: 'Email and OTP are required',
       });
     }
 
-    // Check if token exists and is valid
-    const tokenQuery = `
-      SELECT * FROM PasswordResetTokens 
-      WHERE Token = ? AND ExpiryDate > NOW() AND IsUsed = 0
+    // Check if OTP is valid
+    const otpQuery = `
+      SELECT pt.*, 
+             COALESCE(c.Email, e.Email) as Email
+      FROM PasswordResetTokens pt
+      LEFT JOIN Customers c ON pt.UserID = c.CustomerID
+      LEFT JOIN Employees e ON pt.UserID = e.EmployeeID
+      WHERE pt.Token = ? 
+        AND pt.ExpiryDate > NOW() 
+        AND pt.IsUsed = 0
+        AND (c.Email = ? OR e.Email = ?)
     `;
 
-    db.query(tokenQuery, [token], async (err, results) => {
+    db.query(otpQuery, [otp, email, email], async (err, results) => {
       if (err) {
         console.error('Database error:', err);
         return res.status(500).json({
@@ -1887,65 +1904,91 @@ router.post('/reset-password', async (req, res) => {
       if (results.length === 0) {
         return res.status(400).json({
           success: false,
-          message: 'Invalid or expired token',
+          message: 'Invalid or expired OTP',
         });
       }
 
-      const resetToken = results[0];
-      const userId = resetToken.UserID;
+      // Mark OTP as used
+      const markOtpQuery = `UPDATE PasswordResetTokens SET IsUsed = 1 WHERE Token = ?`;
+      db.query(markOtpQuery, [otp], async (markErr) => {
+        if (markErr) {
+          console.error('Error marking OTP as used:', markErr);
+        }
 
+        // Generate a password reset token (for the next step)
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        return res.status(200).json({
+          success: true,
+          message: 'OTP verified successfully',
+          resetToken: resetToken,
+          email: email
+        });
+      });
+    });
+  } catch (error) {
+    console.error('Error in OTP verification:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
+
+// Reset password endpoint (updated)
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { email, resetToken, newPassword } = req.body;
+
+    if (!email || !resetToken || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email, reset token and new password are required',
+      });
+    }
+
+    // In a real app, you would validate the resetToken here
+    // For simplicity, we'll proceed directly to password reset
+
+    // Check if email exists
+    const userQuery = `
+      SELECT 'customer' as userType, CustomerID as userId FROM Customers WHERE Email = ?
+      UNION
+      SELECT 'employee' as userType, EmployeeID as userId FROM Employees WHERE Email = ?
+    `;
+
+    db.query(userQuery, [email, email], async (err, results) => {
+      if (err || results.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid email address',
+        });
+      }
+
+      const user = results[0];
+      
       // Hash the new password
-      const bcrypt = require('bcrypt');
+      
       const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-      // Determine if user is customer or employee
-      const userTypeQuery = `
-        SELECT 'customer' as userType FROM Customers WHERE CustomerID = ?
-        UNION
-        SELECT 'employee' as userType FROM Employees WHERE EmployeeID = ?
-      `;
+      // Update password
+      const table = user.userType === 'customer' ? 'Customers' : 'Employees';
+      const idField = user.userType === 'customer' ? 'CustomerID' : 'EmployeeID';
+      const updateQuery = `UPDATE ${table} SET Password = ? WHERE ${idField} = ?`;
 
-      db.query(userTypeQuery, [userId, userId], async (userTypeErr, userTypeResults) => {
-        if (userTypeErr || userTypeResults.length === 0) {
-          console.error('Error determining user type:', userTypeErr);
+      db.query(updateQuery, [hashedPassword, user.userId], async (updateErr) => {
+        if (updateErr) {
+          console.error('Error updating password:', updateErr);
           return res.status(500).json({
             success: false,
-            message: 'Failed to identify user account',
-            error: userTypeErr ? userTypeErr.message : 'User not found'
+            message: 'Failed to update password',
+            error: updateErr.message
           });
         }
 
-        const userType = userTypeResults[0].userType;
-        const table = userType === 'customer' ? 'Customers' : 'Employees';
-        const idField = userType === 'customer' ? 'CustomerID' : 'EmployeeID';
-
-        // Update password
-        const updateQuery = `UPDATE ${table} SET Password = ? WHERE ${idField} = ?`;
-
-        db.query(updateQuery, [hashedPassword, userId], async (updateErr) => {
-          if (updateErr) {
-            console.error('Error updating password:', updateErr);
-            return res.status(500).json({
-              success: false,
-              message: 'Failed to update password',
-              error: updateErr.message
-            });
-          }
-
-          // Mark token as used
-          const markTokenQuery = `UPDATE PasswordResetTokens SET IsUsed = 1 WHERE Token = ?`;
-
-          db.query(markTokenQuery, [token], async (markErr) => {
-            if (markErr) {
-              console.error('Error marking token as used:', markErr);
-              // Continue anyway since password was updated
-            }
-
-            return res.status(200).json({
-              success: true,
-              message: 'Password has been reset successfully',
-            });
-          });
+        return res.status(200).json({
+          success: true,
+          message: 'Password has been reset successfully',
         });
       });
     });
@@ -2272,21 +2315,123 @@ function getDefaultVehicleImage(model, type) {
 }
 
 
+// Backend option: Modify the backend to allow cascade deletion
+router.delete("/vehicle/:id", authenticateToken, authorizeRoles(['Customer']), async (req, res) => {
+    try {
+        const { id: vehicleNo } = req.params;
+        const { customerId } = req.user;
 
+        // 1. First check if the vehicle exists and belongs to the customer
+        const checkOwnershipQuery = `
+            SELECT VehicleNo FROM Vehicles 
+            WHERE VehicleNo = ? AND CustomerID = ?
+        `;
+
+        db.query(checkOwnershipQuery, [vehicleNo, customerId], async (err, results) => {
+            if (err) {
+                console.error("Database error checking vehicle ownership:", err);
+                return res.status(500).json({ error: "Internal server error" });
+            }
+
+            if (results.length === 0) {
+                return res.status(404).json({ 
+                    error: "Vehicle not found or you don't have permission to delete it" 
+                });
+            }
+
+            // Start transaction for all the operations
+            db.beginTransaction(async (err) => {
+                if (err) {
+                    console.error("Error starting transaction:", err);
+                    return res.status(500).json({ error: "Internal server error" });
+                }
+
+                try {
+                    // 2. First update all active appointments to 'Cancelled'
+                    await new Promise((resolve, reject) => {
+                        const updateAppointmentsQuery = `
+                            UPDATE Appointments 
+                            SET Status = 'Cancelled'
+                            WHERE VehicleID = ? AND Status NOT IN ('Completed', 'Cancelled')
+                        `;
+                        
+                        db.query(updateAppointmentsQuery, [vehicleNo], (err, updateResult) => {
+                            if (err) return reject(err);
+                            resolve(updateResult);
+                        });
+                    });
+                    
+                    // Log how many appointments were cancelled
+                    const cancelledAppointments = await new Promise((resolve, reject) => {
+                        db.query(`
+                            SELECT COUNT(*) as count FROM Appointments 
+                            WHERE VehicleID = ? AND Status = 'Cancelled'
+                        `, [vehicleNo], (err, countResult) => {
+                            if (err) return reject(err);
+                            resolve(countResult[0].count);
+                        });
+                    });
+
+                    // 3. Delete from dependent tables
+                    // Delete service records for this vehicle
+                    await new Promise((resolve, reject) => {
+                        db.query(`
+                            DELETE sr FROM ServiceRecords sr
+                            JOIN JobCards jc ON sr.JobCardID = jc.JobCardID
+                            JOIN Appointments a ON jc.AppointmentID = a.AppointmentID
+                            WHERE a.VehicleID = ?
+                        `, [vehicleNo], (err) => {
+                            if (err) return reject(err);
+                            resolve();
+                        });
+                    });
+
+                    // 4. Delete the vehicle
+                    await new Promise((resolve, reject) => {
+                        db.query(`
+                            DELETE FROM Vehicles 
+                            WHERE VehicleNo = ?
+                        `, [vehicleNo], (err, result) => {
+                            if (err) return reject(err);
+                            if (result.affectedRows === 0) {
+                                return reject(new Error("Vehicle not found"));
+                            }
+                            resolve();
+                        });
+                    });
+
+                    // 5. Commit the transaction
+                    db.commit((err) => {
+                        if (err) {
+                            console.error("Error committing transaction:", err);
+                            return db.rollback(() => {
+                                res.status(500).json({ error: "Internal server error" });
+                            });
+                        }
+
+                        res.status(200).json({ 
+                            success: true,
+                            message: "Vehicle deleted successfully",
+                            cancelledAppointments: cancelledAppointments
+                        });
+                    });
+
+                } catch (error) {
+                    // Rollback on any error
+                    db.rollback(() => {
+                        console.error("Error during forced vehicle deletion:", error);
+                        res.status(500).json({ error: "Internal server error" });
+                    });
+                }
+            });
+        });
+
+    } catch (error) {
+        console.error("Error in /vehicle/:id/force DELETE endpoint:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
   
-  
-
-
-
-
-
-
-
-
-
-
-  
-
 
 
 

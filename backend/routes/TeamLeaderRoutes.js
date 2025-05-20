@@ -10,10 +10,10 @@ const { messaging, bucket } = require("../firebaseConfig");
 
 const router = express.Router();
 
-router.use((req, res, next) => {
-    console.log("Team Leader Route Hit:", req.method, req.url);
-    next();
-});
+// router.use((req, res, next) => {
+//     console.log("Team Leader Route Hit:", req.method, req.url);
+//     next();
+// });
 
 
 router.get("/present-employees", authenticateToken, authorizeRoles(["Team Leader", "Admin"]), async (req, res) => {

@@ -14,10 +14,10 @@ const path = require('path');
 const router = express.Router();
 
 
-router.use((req, res, next) => {
-    console.log("Report Route Hit:", req.method, req.url);
-    next();
-});
+// router.use((req, res, next) => {
+//     console.log("Report Route Hit:", req.method, req.url);
+//     next();
+// });
 
 router.get("/count-employees",authenticateToken,authorizeRoles(["Admin"]),(req,res)=>{
     const query = `SELECT COUNT(*) AS employee_count FROM employees`;

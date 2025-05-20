@@ -8,10 +8,10 @@ const { messaging, bucket } = require("../firebaseConfig");
 
 const router = express.Router();
 
-router.use((req, res, next) => {
-    console.log("Mechanic Route Hit:", req.method, req.url);
-    next();
-});
+// router.use((req, res, next) => {
+//     console.log("Mechanic Route Hit:", req.method, req.url);
+//     next();
+// });
 
 
 router.put("/update-status/:jobCardId", authenticateToken, authorizeRoles(["Mechanic"]), async (req, res) => {

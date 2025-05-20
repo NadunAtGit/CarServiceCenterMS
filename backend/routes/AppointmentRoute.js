@@ -8,10 +8,10 @@ const moment = require("moment"); // Import moment for date formatting
 
 const router = express.Router();
 
-router.use((req, res, next) => {
-    console.log("Appointment Route Hit:", req.method, req.url);
-    next();
-});
+// router.use((req, res, next) => {
+//     console.log("Appointment Route Hit:", req.method, req.url);
+//     next();
+// });
 
 
 

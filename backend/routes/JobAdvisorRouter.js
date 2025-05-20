@@ -10,10 +10,10 @@ const { messaging, bucket } = require("../firebaseConfig");
 
 const router = express.Router();
 
-router.use((req, res, next) => {
-    console.log("Service Advisor Route Hit:", req.method, req.url);
-    next();
-});
+// router.use((req, res, next) => {
+//     console.log("Service Advisor Route Hit:", req.method, req.url);
+//     next();
+// });
 
 router.post("/create-jobcard/:appointmentId", authenticateToken, authorizeRoles(["Service Advisor"]), async (req, res) => {
     const { ServiceDetails, Type, ServiceRecords } = req.body; 
