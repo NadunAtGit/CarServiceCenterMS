@@ -202,16 +202,23 @@ const AdminDashboard = () => {
       }
       // Mock revenue by department
       // Inside fetchDashboardData function
-const departmentRevenueResponse = await axiosInstance.get('/api/reports/department-revenue');
-console.log("Department Revenue Data:", departmentRevenueResponse.data);
+      const departmentRevenueResponse = await axiosInstance.get('/api/reports/department-revenue');
+console.log("API Response:", departmentRevenueResponse.data);
 
-if (departmentRevenueResponse.data.success && Array.isArray(departmentRevenueResponse.data.departmentRevenue)) {
-  setRevenueByDepartment(departmentRevenueResponse.data.departmentRevenue);
+if (departmentRevenueResponse.data?.success) {
+    // Transform the data structure for Recharts
+    const chartData = departmentRevenueResponse.data.departmentRevenue.map(item => ({
+        name: item.department,  // Map department to name
+        value: Number(item.revenue)  // Map revenue to value
+    }));
+    
+    console.log("Chart data:", chartData);
+    setRevenueByDepartment(chartData);
 } else {
-  console.error("Unexpected API response format for department revenue:", departmentRevenueResponse.data);
-  // Fallback to empty array or mock data if needed
-  setRevenueByDepartment([]);
+    console.error("Invalid data format received");
+    setRevenueByDepartment([]);
 }
+
 
 
     } catch (error) {
@@ -406,32 +413,67 @@ if (departmentRevenueResponse.data.success && Array.isArray(departmentRevenueRes
           </div>
 
           {/* Department Revenue Chart */}
-          <div className="bg-white/70 backdrop-blur-xl rounded-xl border border-[#944EF8]/10 p-5 shadow-md hover:shadow-lg transition-all duration-300 mb-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">Revenue by Department</h3>
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={revenueByDepartment}
-                  margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="department" />
-                  <YAxis />
-                  <Tooltip 
-                    formatter={(value) => [`$${value}`, 'Revenue']}
-                    contentStyle={{
-                      backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                      border: '1px solid #944EF8',
-                      borderRadius: '8px'
-                    }}
-                  />
-                  <Legend />
-                  <Bar dataKey="revenue" fill="#944EF8" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+                      {/* Department Revenue Chart */}
+                      <div className="bg-white/70 backdrop-blur-xl rounded-xl border border-[#944EF8]/10 p-5 shadow-md hover:shadow-lg transition-all duration-300 mb-6">
+  <h3 className="text-lg font-semibold text-gray-800 mb-4">Revenue by Department</h3>
+  <div className="h-72">
+    {revenueByDepartment && revenueByDepartment.length > 0 ? (
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart
+          data={revenueByDepartment}
+          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+          <XAxis 
+            dataKey="name"  // Department names on X-axis
+            tick={{ fontSize: 12 }}
+          />
+          <YAxis 
+            type="number"  // Revenue values on Y-axis
+            tickFormatter={(value) => `$${value.toLocaleString()}`}
+          />
+          <Tooltip 
+            formatter={(value) => [`$${value.toLocaleString()}`, 'Revenue']}
+            labelFormatter={(name) => `Department: ${name}`}
+            contentStyle={{
+              backgroundColor: 'rgba(255, 255, 255, 0.9)',
+              border: '1px solid #944EF8',
+              borderRadius: '8px'
+            }}
+          />
+          <Legend />
+          <Bar 
+            dataKey="value" 
+            name="Revenue"
+            animationDuration={1500}
+            radius={[4, 4, 0, 0]}  // Rounded corners on top only
+          >
+            {revenueByDepartment.map((entry, index) => (
+              <Cell 
+                key={`cell-${index}`} 
+                fill={COLORS[index % COLORS.length]} 
+              />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    ) : (
+      <div className="flex flex-col items-center justify-center h-full">
+        <FiBarChart2 className="text-gray-400 mb-2" size={40} />
+        <p className="text-gray-500">No revenue data available</p>
+        <button 
+          onClick={fetchDashboardData}
+          className="mt-4 px-4 py-2 bg-[#944EF8] text-white rounded-md hover:bg-[#7a3fd0]"
+        >
+          Retry
+        </button>
+      </div>
+    )}
+  </div>
+</div>
 
           {/* Top Performing Employees */}
-          <div className="bg-white/70 backdrop-blur-xl rounded-xl border border-[#944EF8]/10 p-5 shadow-md hover:shadow-lg transition-all duration-300">
+          {/* <div className="bg-white/70 backdrop-blur-xl rounded-xl border border-[#944EF8]/10 p-5 shadow-md hover:shadow-lg transition-all duration-300">
             <div className="flex justify-between items-center mb-5">
               <h3 className="text-lg font-semibold text-gray-800">Top Performing Employees</h3>
               <FiBarChart2 size={20} className="text-[#944EF8]" />
@@ -475,7 +517,7 @@ if (departmentRevenueResponse.data.success && Array.isArray(departmentRevenueRes
                 </tbody>
               </table>
             </div>
-          </div>
+          </div> */}
         </>
       )}
     </div>

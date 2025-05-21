@@ -17,8 +17,7 @@ const CashierHome = () => {
       { title: "Dashboard", icon: <MdSpaceDashboard size={26} />, path: "/cashier/dashboard" },
       { title: "Orders", icon: <FaUserTie size={26} />, path: "/cashier/orders" },
       { title: "Payments", icon: <MdOutlineEventNote size={26} />, path: "/cashier/payments" },
-      { title: "Reports", icon: <FaClipboardList size={26} />, path: "/cashier/reports" },
-      { title: "Inventory", icon: <FaClipboardList size={26} />, path: "/cashier/inventory" },
+      { title: "Store", icon: <FaClipboardList size={26} />, path: "/cashier/inventory" },
       { title: "Services", icon: <FaRegAddressCard size={26} />, path: "/cashier/services" },
       
     ];

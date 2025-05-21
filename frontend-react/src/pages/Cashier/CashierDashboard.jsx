@@ -18,6 +18,7 @@ const CashierDashboard = () => {
   const [recentTransactions, setRecentTransactions] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [topSellingItems, setTopSellingItems] = useState([]);
+  const [topServices, setTopServices] = useState([]);
   
   // Current date display
   const currentDate = new Date();
@@ -49,6 +50,14 @@ if (recentTransactionsResponse.data.success && recentTransactionsResponse.data.r
   // Fallback to empty array if API fails
   setRecentTransactions([]);
 }
+
+  const topServicesResponse = await axiosInstance.get('/api/reports/top-five-services');
+    
+    if (topServicesResponse.data.success && topServicesResponse.data.topServices) {
+      setTopServices(topServicesResponse.data.topServices);
+    } else {
+      setTopServices([]);
+    }
 
       
       // Update dashboard data with API responses
@@ -83,12 +92,12 @@ if (recentTransactionsResponse.data.success && recentTransactionsResponse.data.r
             amount: stats.payhere.amount, 
             percentage: total > 0 ? (stats.payhere.amount / total * 100) : 0 
           },
-          { 
-            method: 'Other', 
-            count: stats.other.count, 
-            amount: stats.other.amount, 
-            percentage: total > 0 ? (stats.other.amount / total * 100) : 0 
-          }
+          // { 
+          //   method: 'Other', 
+          //   count: stats.other.count, 
+          //   amount: stats.other.amount, 
+          //   percentage: total > 0 ? (stats.other.amount / total * 100) : 0 
+          // }
         ]);
       }
       
@@ -203,54 +212,7 @@ if (recentTransactionsResponse.data.success && recentTransactionsResponse.data.r
           </div>
           
           {/* Performance & Goals */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            {/* Cashier Performance */}
-            <div className="bg-white rounded-xl border border-[#944EF8]/20 p-5 shadow-sm">
-              <h3 className="text-sm font-medium text-gray-500 mb-2">Your Performance</h3>
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-2xl font-bold text-gray-800">{dashboardData.cashierPerformance}%</h2>
-                <FiTrendingUp size={20} className="text-green-500" />
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2.5">
-                <div className="bg-green-500 h-2.5 rounded-full" style={{ width: `${dashboardData.cashierPerformance}%` }}></div>
-              </div>
-              <p className="text-xs text-gray-500 mt-2">Based on transaction speed and accuracy</p>
-            </div>
-            
-            {/* Daily Target */}
-            <div className="bg-white rounded-xl border border-[#944EF8]/20 p-5 shadow-sm">
-              <h3 className="text-sm font-medium text-gray-500 mb-2">Daily Target</h3>
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-2xl font-bold text-gray-800">{dashboardData.targetCompletion}%</h2>
-                <FiCalendar size={20} className="text-[#944EF8]" />
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2.5">
-                <div className="bg-[#944EF8] h-2.5 rounded-full" style={{ width: `${dashboardData.targetCompletion}%` }}></div>
-              </div>
-              <p className="text-xs text-gray-500 mt-2">$1,245.75 of $1,600 daily goal</p>
-            </div>
-            
-            {/* Payment Methods */}
-            <div className="bg-white rounded-xl border border-[#944EF8]/20 p-5 shadow-sm">
-              <h3 className="text-sm font-medium text-gray-500 mb-3">Payment Methods</h3>
-              {paymentMethods.map((method, index) => (
-                <div key={index} className="mb-2">
-                  <div className="flex justify-between text-sm">
-                    <span>{method.method}</span>
-                    <span className="font-medium">${method.amount.toFixed(2)}</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
-                    <div 
-                      className={`h-1.5 rounded-full ${
-                        index === 0 ? 'bg-[#944EF8]' : index === 1 ? 'bg-green-500' : 'bg-blue-500'
-                      }`} 
-                      style={{ width: `${method.percentage}%` }}
-                    ></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          
           
           {/* Recent Transactions & Top Items */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -298,25 +260,27 @@ if (recentTransactionsResponse.data.success && recentTransactionsResponse.data.r
             <div className="bg-white rounded-xl border border-[#944EF8]/20 p-5 shadow-sm">
               <h2 className="text-lg font-semibold mb-4 text-gray-800">Top Services</h2>
               <div className="space-y-4">
-                {topSellingItems.map((item, index) => (
-                  <div key={index} className="flex items-center">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${
-                      index === 0 ? 'bg-[#944EF8] text-white' : 
-                      index === 1 ? 'bg-[#944EF8]/80 text-white' : 
-                      index === 2 ? 'bg-[#944EF8]/60 text-white' : 
-                      'bg-[#944EF8]/40 text-white'
-                    }`}>
-                      {index + 1}
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex justify-between">
-                        <span className="font-medium text-gray-800">{item.name}</span>
-                        <span className="text-gray-600">${item.revenue.toFixed(2)}</span>
+                {topServices.map((service, index) => (
+                    <div key={index} className="flex items-center">
+                      {/* Rank badge */}
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${
+                        index === 0 ? 'bg-[#944EF8] text-white' : 
+                        index === 1 ? 'bg-[#944EF8]/80 text-white' : 
+                        index === 2 ? 'bg-[#944EF8]/60 text-white' : 
+                        'bg-[#944EF8]/40 text-white'
+                      }`}>
+                        {index + 1}
                       </div>
-                      <div className="text-xs text-gray-500">{item.count} transactions</div>
+                      <div className="flex-1">
+                        <div className="flex justify-between">
+                          <span className="font-medium text-gray-800">{service.name}</span>
+                          {service.count && (
+                            <span className="text-gray-600">{service.count} orders</span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+))}
               </div>
               
               <div className="mt-6 pt-4 border-t">

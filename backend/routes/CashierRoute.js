@@ -871,6 +871,51 @@ router.get('/stocks', authenticateToken, authorizeRoles(["Admin", "Cashier"]), (
     });
 });
 
+// Add this route to your API routes file
+router.get('/stock-batches', authenticateToken, authorizeRoles(["Admin", "Cashier"]), (req, res) => {
+    // Query to fetch stock batches data from the database
+    const query = `
+        SELECT 
+            sb.BatchID, sb.StockID, sb.PartID, sb.BatchNumber, 
+            sb.InitialQuantity, sb.RemainingQuantity, sb.CostPrice, 
+            sb.RetailPrice, sb.ManufacturingDate, sb.ExpiryDate, 
+            sb.ReceiptDate, p.Name AS PartName, p.Description AS PartDescription,
+            s.SupplierID, sup.Name AS SupplierName
+        FROM 
+            StockBatches sb
+        LEFT JOIN 
+            Parts p ON sb.PartID = p.PartID
+        LEFT JOIN 
+            Stock s ON sb.StockID = s.StockID
+        LEFT JOIN 
+            Suppliers sup ON s.SupplierID = sup.SupplierID
+        ORDER BY
+            sb.ReceiptDate DESC
+    `;
+
+    db.query(query, (err, results) => {
+        if (err) {
+            console.error("Error fetching stock batches:", err);
+            return res.status(500).json({ 
+                message: "Error fetching stock batches", 
+                error: err 
+            });
+        }
+        
+        if (results.length === 0) {
+            return res.status(200).json({ 
+                message: "No stock batches found", 
+                stockBatches: [] 
+            });
+        }
+        
+        res.status(200).json({ 
+            message: "Stock batches fetched successfully", 
+            stockBatches: results 
+        });
+    });
+});
+
 
 
 

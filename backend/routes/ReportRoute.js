@@ -893,7 +893,7 @@ router.get("/:type/download", authenticateToken, authorizeRoles(["Admin"]), asyn
     });
   }
 
-  async function saveReportToDatabase(reportData, type, startDate, endDate, employeeId, department = 'All') {
+async function saveReportToDatabase(reportData, type, startDate, endDate, employeeId, department = 'All') {
     return new Promise((resolve, reject) => {
       try {
         // Generate a unique report ID
@@ -1128,11 +1128,7 @@ if (report.ReportData) {
   });
 
 
-  router.get("/department-revenue", authenticateToken, authorizeRoles(["Admin"]), (req, res) => {
-    // 1. Get all paid invoices and their JobCard_IDs and Totals.
-    // 2. Join with JobCards to get the Type (department) for each JobCard.
-    // 3. Group by department and sum the totals.
-  
+router.get("/department-revenue", authenticateToken, authorizeRoles(["Admin"]), (req, res) => {
     const query = `
       SELECT 
         jc.Type AS department,
@@ -1143,30 +1139,30 @@ if (report.ReportData) {
       GROUP BY jc.Type
       ORDER BY revenue DESC
     `;
-  
-    db.query(query, (err, results) => {
-      if (err) {
-        console.error("Error fetching department revenue:", err);
-        return res.status(500).json({
-          success: false,
-          message: "Error fetching department revenue",
-          error: err
-        });
-      }
-  
-      // Format the results as an array of { department, revenue }
-      const departmentRevenue = results.map(row => ({
-        department: row.department || "Unknown",
-        revenue: Number(row.revenue) || 0
-      }));
-  
-      return res.status(200).json({
-        success: true,
-        departmentRevenue
-      });
-    });
-  });
 
+    db.query(query, (err, results) => {
+        if (err) {
+            console.error("Error fetching department revenue:", err);
+            return res.status(500).json({
+                success: false,
+                message: "Error fetching department revenue"
+            });
+        }
+
+        // Convert revenue to numbers and ensure proper formatting
+        const departmentRevenue = results.map(row => ({
+            department: row.department || "Unknown",
+            revenue: parseFloat(row.revenue) || 0
+        }));
+
+        console.log("Sending department revenue data:", departmentRevenue); // Add this log
+
+        return res.status(200).json({
+            success: true,
+            departmentRevenue: departmentRevenue
+        });
+    });
+});
   router.get("/today-sales", authenticateToken, authorizeRoles(["Cashier"]), (req, res) => {
     // Get current date (May 6, 2025)
     const today = new Date();
@@ -1371,9 +1367,243 @@ if (report.ReportData) {
     });
   });
   
+
+  router.get("/monthly-service-records", authenticateToken, authorizeRoles(["Admin"]), (req, res) => {
+    const today = new Date();
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    const query = `
+        SELECT 
+            COUNT(jc.JobCardID) AS serviceCount,
+            (
+                SELECT COUNT(jc2.JobCardID) 
+                FROM JobCards jc2
+                JOIN Appointments a2 ON jc2.AppointmentID = a2.AppointmentID
+                WHERE jc2.Status = 'Finished'
+                AND a2.Date BETWEEN 
+                    DATE_SUB(?, INTERVAL 1 MONTH) 
+                    AND DATE_SUB(?, INTERVAL 1 MONTH)
+            ) AS lastMonthCount
+        FROM JobCards jc
+        JOIN Appointments a ON jc.AppointmentID = a.AppointmentID
+        WHERE jc.Status IN ('Finished','Paid')
+        AND a.Date BETWEEN ? AND ?
+    `;
+
+    db.query(query, [startOfMonth, endOfMonth, startOfMonth, endOfMonth], (err, results) => {
+        if (err) {
+            console.error("Error fetching monthly service records:", err);
+            return res.status(500).json({ 
+                success: false,
+                message: "Database error" 
+            });
+        }
+
+        const currentCount = results[0]?.serviceCount || 0;
+        const lastMonthCount = results[0]?.lastMonthCount || 0;
+        
+        // Calculate growth percentage
+        let growthPercentage = 0;
+        if (lastMonthCount > 0) {
+            growthPercentage = ((currentCount - lastMonthCount) / lastMonthCount) * 100;
+        } else if (currentCount > 0) {
+            growthPercentage = 100; // Infinite growth from 0
+        }
+
+        res.status(200).json({ 
+            success: true,
+            serviceCount: currentCount,
+            growthPercentage: parseFloat(growthPercentage.toFixed(2)) 
+        });
+    });
+});
+
+
+
+router.get("/custom", authenticateToken, authorizeRoles(["Admin"]), (req, res) => {
+    const { startDate, endDate, department } = req.query;
+    
+    // Validate required parameters
+    if (!startDate || !endDate) {
+        return res.status(400).json({ 
+            success: false, 
+            message: "Both startDate and endDate parameters are required" 
+        });
+    }
+
+    // Parse dates and validate
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    if (isNaN(start.getTime())) {
+        return res.status(400).json({ 
+            success: false, 
+            message: "Invalid startDate format. Use YYYY-MM-DD" 
+        });
+    }
+    
+    if (isNaN(end.getTime())) {
+        return res.status(400).json({ 
+            success: false, 
+            message: "Invalid endDate format. Use YYYY-MM-DD" 
+        });
+    }
+    
+    // Set time to beginning of start date and end of end date
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+
+    // Base query with optional department filter
+    let baseQuery = `
+        FROM Invoice i
+        LEFT JOIN JobCards j ON i.JobCard_ID = j.JobCardID
+        WHERE i.GeneratedDate BETWEEN ? AND ?
+    `;
+    
+    if (department && department !== 'All') {
+        baseQuery += ` AND j.Type = ?`;
+    }
+
+    // Main summary query
+    const summaryQuery = `
+        SELECT 
+            COUNT(i.Invoice_ID) AS transactions,
+            SUM(i.Total) AS totalRevenue,
+            SUM(i.Labour_Cost) AS serviceRevenue,
+            SUM(i.Parts_Cost) AS partsRevenue,
+            COUNT(DISTINCT j.JobCardID) AS servicesCompleted,
+            (SELECT COUNT(*) FROM Parts_Used pu 
+             JOIN Invoice inv ON pu.InvoiceID = inv.Invoice_ID 
+             WHERE inv.GeneratedDate BETWEEN ? AND ?) AS partsSold
+        ${baseQuery}
+    `;
+
+    // Daily breakdown query
+    const dailyQuery = `
+        SELECT 
+            DATE(i.GeneratedDate) AS day,
+            COUNT(i.Invoice_ID) AS transactions,
+            SUM(i.Total) AS revenue
+        ${baseQuery}
+        GROUP BY day
+        ORDER BY day
+    `;
+
+    // Department breakdown query
+    const departmentQuery = `
+        SELECT 
+            CASE 
+                WHEN j.Type = 'Maintenance' THEN 'Maintenance'
+                WHEN j.Type = 'Repair' THEN 'Repairs'
+                ELSE j.Type
+            END AS department,
+            COUNT(i.Invoice_ID) AS transactions,
+            SUM(i.Total) AS revenue
+        ${baseQuery}
+        GROUP BY department
+        ORDER BY revenue DESC
+    `;
+
+    // Prepare query parameters
+    const params = [start, end];
+    const paramsWithDept = department && department !== 'All' 
+        ? [...params, department] 
+        : params;
+
+    // Execute all queries in parallel
+    Promise.all([
+        new Promise((resolve, reject) => {
+            db.query(summaryQuery, [...params, ...params], (err, results) => {
+                if (err) reject(err);
+                else resolve(results);
+            });
+        }),
+        new Promise((resolve, reject) => {
+            db.query(dailyQuery, paramsWithDept, (err, results) => {
+                if (err) reject(err);
+                else resolve(results);
+            });
+        }),
+        new Promise((resolve, reject) => {
+            db.query(departmentQuery, paramsWithDept, (err, results) => {
+                if (err) reject(err);
+                else resolve(results);
+            });
+        })
+    ])
+    .then(([summaryResults, dailyResults, departmentResults]) => {
+        // Format dates for display
+        const formatDate = (date) => {
+            return date.toISOString().split('T')[0];
+        };
+
+        // Build the response
+        const report = {
+            title: "Custom Report",
+            dateRange: `${formatDate(start)} to ${formatDate(end)}`,
+            department: department || 'All',
+            transactions: summaryResults[0]?.transactions || 0,
+            revenue: summaryResults[0]?.totalRevenue || 0,
+            services: summaryResults[0]?.servicesCompleted || 0,
+            parts: summaryResults[0]?.partsSold || 0,
+            serviceRevenue: summaryResults[0]?.serviceRevenue || 0,
+            partsRevenue: summaryResults[0]?.partsRevenue || 0,
+            dailyBreakdown: dailyResults.map(day => ({
+                date: day.day,
+                transactions: day.transactions || 0,
+                revenue: day.revenue || 0
+            })),
+            departmentBreakdown: departmentResults.map(dept => ({
+                department: dept.department,
+                transactions: dept.transactions || 0,
+                revenue: dept.revenue || 0
+            }))
+        };
+
+        res.status(200).json({ success: true, data: report });
+    })
+    .catch(err => {
+        console.error("Error fetching custom report:", err);
+        res.status(500).json({ 
+            success: false, 
+            message: "Database error",
+            error: err.message 
+        });
+    });
+});
+
+router.get("/top-five-services", authenticateToken, authorizeRoles(["Cashier"]), (req, res) => {
+    const query = `
+        SELECT 
+            sr.Description AS name,
+            COUNT(sr.ServiceRecord_ID) AS count
+        FROM ServiceRecords sr
+        JOIN JobCards jc ON sr.JobCardID = jc.JobCardID
+        WHERE jc.Status IN ('Finished', 'Paid')
+        GROUP BY sr.Description
+        ORDER BY count DESC
+        LIMIT 5
+    `;
+
+    db.query(query, (err, results) => {
+        if (err) {
+            console.error("Error fetching top services:", err);
+            return res.status(500).json({ 
+                success: false,
+                message: "Database error" 
+            });
+        }
+
+        res.status(200).json({ 
+            success: true,
+            topServices: results // Now each item has { name, count }
+        });
+    });
+});
+
   
-  
-  
+
   
   
   

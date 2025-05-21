@@ -70,42 +70,84 @@ const AdminReports = () => {
   };
   
   const handleDownloadReport = async (reportType, customParams = {}) => {
-    try {
-      let endpoint = `/api/reports/${reportType}/download`;
-      let params = {};
-      
-      // Add custom parameters if provided
-      if (Object.keys(customParams).length > 0) {
-        params = { ...customParams };
+  try {
+    // Set default parameters based on report type
+    const params = { ...customParams };
+    
+    // Set default date for daily reports if not provided
+    if (reportType === 'daily' && !params.date) {
+      params.date = new Date().toISOString().split('T')[0];
+    }
+
+    // Validate required parameters for custom reports
+    if (reportType === 'custom') {
+      if (!params.startDate || !params.endDate) {
+        throw new Error('Both startDate and endDate are required for custom reports');
       }
       
-      // Make API call to generate and download PDF
-      const response = await axiosInstance.get(endpoint, {
-        params,
-        responseType: 'blob' // Important for handling file downloads
-      });
-      
-      // Create a blob URL and trigger download
-      const blob = new Blob([response.data], { type: 'application/pdf' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      
-      // Set filename based on report type
-      const date = new Date().toISOString().split('T')[0];
-      link.download = `${reportType}_report_${date}.pdf`;
-      
-      document.body.appendChild(link);
-      link.click();
-      
-      // Clean up
+      // Validate date range
+      if (new Date(params.endDate) < new Date(params.startDate)) {
+        throw new Error('End date cannot be before start date');
+      }
+    }
+
+    // Make API call to generate and download PDF
+    const response = await axiosInstance.get(`/api/reports/${reportType}/download`, {
+      params,
+      responseType: 'blob',
+      timeout: 30000 // 30 seconds timeout
+    });
+
+    // Validate response
+    if (!response.data || response.data.size === 0) {
+      throw new Error('Empty PDF received from server');
+    }
+
+    // Create a more unique filename
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    let filename = `${reportType}_report_${timestamp}.pdf`;
+    
+    // For custom reports, include the date range in filename
+    if (reportType === 'custom') {
+      filename = `custom_report_${params.startDate}_to_${params.endDate}_${timestamp}.pdf`;
+    }
+
+    // Create and trigger download
+    const blob = new Blob([response.data], { type: 'application/pdf' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.style.display = 'none';
+    
+    document.body.appendChild(link);
+    link.click();
+
+    // Clean up
+    setTimeout(() => {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(link);
-    } catch (error) {
-      console.error(`Error downloading ${reportType} report:`, error);
-      alert(`Failed to download report. Please try again.`);
+    }, 100);
+    
+  } catch (error) {
+    console.error(`Error downloading ${reportType} report:`, error);
+    
+    // More specific error messages
+    let errorMessage = 'Failed to download report. Please try again.';
+    if (error.response) {
+      errorMessage = `Server error: ${error.response.status}`;
+    } else if (error.request) {
+      errorMessage = 'No response from server. Check your connection.';
+    } else if (error.message) {
+      errorMessage = error.message;
     }
-  };
+    
+    
+    
+    // Optional: Log error to error tracking service
+    // logErrorToService(error);
+  }
+};
 
   const handleGenerateCustomReport = async () => {
     if (!dateRange.start || !dateRange.end) {
@@ -259,18 +301,7 @@ const AdminReports = () => {
           <h2 className="text-xl font-semibold text-gray-800 mb-2 md:mb-0">Recent Reports</h2>
           
           <div className="flex items-center space-x-2">
-            <div className="relative">
-              <select 
-                className="appearance-none pl-3 pr-8 py-2 border rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#944EF8]/30"
-                value={department}
-                onChange={(e) => setDepartment(e.target.value)}
-              >
-                {departmentOptions.map(option => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-              <FiFilter className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-            </div>
+            
           </div>
         </div>
 
@@ -331,36 +362,11 @@ const AdminReports = () => {
       </div>
 
       {/* Custom Report Generator */}
-      <div className="bg-white rounded-xl border border-[#944EF8]/20 p-6 shadow-sm">
+      {/* <div className="bg-white rounded-xl border border-[#944EF8]/20 p-6 shadow-sm">
         <h2 className="text-xl font-semibold text-gray-800 mb-6">Generate Custom Report</h2>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Report Type</label>
-            <select 
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#944EF8]/30"
-              value={reportType}
-              onChange={(e) => setReportType(e.target.value)}
-            >
-              <option value="daily">Daily Summary</option>
-              <option value="weekly">Weekly Summary</option>
-              <option value="monthly">Monthly Summary</option>
-              <option value="custom">Custom Range</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
-            <select 
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#944EF8]/30"
-              value={department}
-              onChange={(e) => setDepartment(e.target.value)}
-            >
-              {departmentOptions.map(option => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          </div>
+          
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
@@ -407,7 +413,7 @@ const AdminReports = () => {
             Generate Report
           </button>
         </div>
-      </div>
+      </div> */}
 
       {/* Report Modal */}
           {showModal && selectedReport && (

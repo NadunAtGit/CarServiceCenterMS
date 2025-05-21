@@ -269,6 +269,45 @@ router.put("/update-milleage/:VehicleNo", authenticateToken, authorizeRoles(['Cu
     }
 });
 
+router.get("/get-mileage/:VehicleNo", authenticateToken, async (req, res) => {
+    try {
+        const { VehicleNo } = req.params;
+
+        const query = `
+            SELECT 
+                CurrentMilleage, 
+                NextServiceMilleage 
+            FROM Vehicles 
+            WHERE VehicleNo = ?
+        `;
+
+        db.query(query, [VehicleNo], (err, results) => {
+            if (err) {
+                console.error("Database error:", err);
+                return res.status(500).json({ error: "Database error" });
+            }
+
+            if (results.length === 0) {
+                return res.status(404).json({ error: "Vehicle not found" });
+            }
+
+            const vehicle = results[0];
+
+            res.status(200).json({
+                success: true,
+                data: {
+                    vehicleNo: VehicleNo,
+                    currentMileage: vehicle.CurrentMilleage,
+                    nextServiceMileage: vehicle.NextServiceMilleage
+                }
+            });
+        });
+    } catch (error) {
+        console.error("Error in /get-mileage:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
 
 
 router.get('/getcustomers', authenticateToken, authorizeRoles(["Admin", "Cashier"]), (req, res) => {

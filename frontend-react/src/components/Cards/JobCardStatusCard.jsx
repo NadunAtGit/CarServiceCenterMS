@@ -17,6 +17,8 @@ const JobCardStatusCard = ({ jobCard, onUpdateServiceStatus, isUpdating, onJobCa
   const [partOrders, setPartOrders] = useState([]);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
   const [error, setError] = useState(null);
+  const [currentMileage, setCurrentMileage] = useState(jobCard.ServiceMilleage || 0);
+  const [isLoadingMileage, setIsLoadingMileage] = useState(false);
 
   // Calculate the number of completed services
   const completedServices = jobCard.Services.filter(s => s.Status === 'Finished').length;
@@ -28,10 +30,31 @@ const JobCardStatusCard = ({ jobCard, onUpdateServiceStatus, isUpdating, onJobCa
   // Check if there's a pending order (status 'Sent')
   const hasPendingOrder = partOrders.some(order => order.OrderStatus === 'Sent');
 
-  // Fetch part orders for this job card
+  // Fetch part orders and current mileage when component mounts
   useEffect(() => {
     fetchPartOrders();
+    fetchCurrentMileage();
   }, [jobCard.JobCardID]);
+
+  const fetchCurrentMileage = async () => {
+    if (!jobCard.VehicleID) return;
+    
+    setIsLoadingMileage(true);
+    try {
+      const response = await AxiosInstance.get(`/api/customers/get-mileage/${jobCard.VehicleID}`);
+      
+      if (response.data && response.data.success) {
+        setCurrentMileage(response.data.data.currentMileage || jobCard.serviceMilleage || 0);
+      } else {
+        toast.error(response.data?.message || 'Failed to fetch current mileage');
+      }
+    } catch (error) {
+      console.error('Error fetching current mileage:', error);
+      toast.error('Failed to fetch current mileage');
+    } finally {
+      setIsLoadingMileage(false);
+    }
+  };
 
   const fetchPartOrders = async () => {
     setIsLoadingOrders(true);
@@ -62,7 +85,6 @@ const JobCardStatusCard = ({ jobCard, onUpdateServiceStatus, isUpdating, onJobCa
       if (response.data) {
         toast.success('Parts ordered successfully!');
         setShowOrderPartsModal(false);
-        // Refresh the orders list to show the new order
         await fetchPartOrders();
       }
     } catch (error) {
@@ -85,7 +107,6 @@ const JobCardStatusCard = ({ jobCard, onUpdateServiceStatus, isUpdating, onJobCa
       return false;
     }
     
-    const currentMileage = jobCard.ServiceMilleage || 0;
     if (mileageValue <= currentMileage) {
       setMileageError(`Next service mileage must be greater than current mileage (${currentMileage})`);
       return false;
@@ -256,9 +277,30 @@ const JobCardStatusCard = ({ jobCard, onUpdateServiceStatus, isUpdating, onJobCa
         <div className="mb-4 p-3 bg-gray-50 rounded-md">
           <div className="flex items-center">
             <FiClock className="text-gray-600 mr-2" />
-            <span className="text-sm font-medium text-gray-700">Current Service Mileage:</span>
-            <span className="ml-2 text-sm text-gray-900">{jobCard.ServiceMilleage || 'N/A'} km</span>
+            {isLoadingMileage ? (
+              <div className="flex items-center">
+                <FiRefreshCw className="animate-spin mr-2" />
+                <span className="text-sm text-gray-600">Loading current mileage...</span>
+              </div>
+            ) : (
+              <>
+                <span className="text-sm font-medium text-gray-700">Current Vehicle Mileage:</span>
+                <span className="ml-2 text-sm text-gray-900">{currentMileage} km</span>
+              </>
+            )}
           </div>
+        </div>
+
+        {/* Service Mileage Information */}
+        <div className="mb-4 p-3 bg-blue-50 rounded-md">
+          <div className="flex items-center">
+            <FiTool className="text-blue-600 mr-2" />
+            <span className="text-sm font-medium text-gray-700">Service Mileage:</span>
+            <span className="ml-2 text-sm text-blue-900">{jobCard.ServiceMilleage || 'N/A'} km</span>
+          </div>
+          <p className="text-xs text-gray-500 mt-1">
+            Mileage recorded when service was started
+          </p>
         </div>
           
         {/* Parts Order Status Section */}
@@ -307,11 +349,11 @@ const JobCardStatusCard = ({ jobCard, onUpdateServiceStatus, isUpdating, onJobCa
             <div className="mb-3 p-2 bg-blue-50 border border-blue-100 rounded-md">
               <div className="flex items-center">
                 <FiClock className="text-blue-600 mr-2" />
-                <span className="text-sm font-medium text-gray-700">Current Mileage:</span>
-                <span className="ml-2 text-sm font-bold text-blue-700">{jobCard.ServiceMilleage || '0'} km</span>
+                <span className="text-sm font-medium text-gray-700">Current Vehicle Mileage:</span>
+                <span className="ml-2 text-sm font-bold text-blue-700">{currentMileage} km</span>
               </div>
               <p className="text-xs text-gray-500 mt-1">
-                Next service mileage must be greater than the current mileage
+                Next service mileage must be greater than the current vehicle mileage
               </p>
             </div>
             
@@ -323,6 +365,7 @@ const JobCardStatusCard = ({ jobCard, onUpdateServiceStatus, isUpdating, onJobCa
                   onChange={(e) => setNextServiceMileage(e.target.value)}
                   placeholder="Enter next service mileage"
                   className={`w-full p-2 border rounded-md ${mileageError ? 'border-red-500' : 'border-gray-300'}`}
+                  min={currentMileage + 1}
                 />
                 <span className="ml-2 text-gray-600">km</span>
               </div>

@@ -4,18 +4,20 @@ import AddPartModal from '../../components/Modals/AddPartModal';
 import AddStockModal from '../../components/Modals/AddStockModal';
 import RegisterPartModal from '../../components/Modals/RegisterPartModal';
 
-
 const CashierInventory = () => {
   const [stocks, setStocks] = useState([]);
   const [parts, setParts] = useState([]);
+  const [stockBatches, setStockBatches] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingParts, setIsLoadingParts] = useState(true);
+  const [isLoadingBatches, setIsLoadingBatches] = useState(true);
   const [error, setError] = useState(null);
   const [partsError, setPartsError] = useState(null);
+  const [batchesError, setBatchesError] = useState(null);
   const [showAddPartModal, setShowAddPartModal] = useState(false);
   const [showAddStockModal, setShowAddStockModal] = useState(false);
   const [showEditPartModal, setShowEditPartModal] = useState(false);
-  const[showRegisterPartModal, setShowRegisterPartModal] = useState(false);
+  const [showRegisterPartModal, setShowRegisterPartModal] = useState(false);
   const [selectedStockId, setSelectedStockId] = useState(null);
   const [selectedPart, setSelectedPart] = useState(null);
 
@@ -23,7 +25,9 @@ const CashierInventory = () => {
   const [stockSearchTerm, setStockSearchTerm] = useState('');
   const [stockItemsSearchTerm, setStockItemsSearchTerm] = useState('');
   const [partsSearchTerm, setPartsSearchTerm] = useState('');
+  const [stockBatchesSearchTerm, setStockBatchesSearchTerm] = useState('');
   const [dateFilter, setDateFilter] = useState('');
+  const [activeTab, setActiveTab] = useState('stocks'); // 'stocks', 'batches'
 
   const fetchStocks = async () => {
     try {
@@ -66,6 +70,27 @@ const CashierInventory = () => {
       setIsLoadingParts(false);
     }
   };
+
+  const fetchStockBatches = async () => {
+    try {
+      setIsLoadingBatches(true);
+      setBatchesError(null);
+      const response = await axiosInstance.get('api/cashier/stock-batches');
+      
+      if (response.data.stockBatches) {
+        setStockBatches(response.data.stockBatches);
+      } else {
+        setBatchesError("Failed to fetch stock batches: " + (response.data.message || "Unknown error"));
+        console.error("Failed to fetch stock batches:", response.data.message);
+      }
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || error.message || "Failed to fetch stock batches";
+      setBatchesError(errorMessage);
+      console.error("Error fetching stock batches:", error);
+    } finally {
+      setIsLoadingBatches(false);
+    }
+  };
   
   const handleDeletePart = async (partId) => {
     if (!window.confirm(`Are you sure you want to delete part #${partId}?`)) {
@@ -97,7 +122,7 @@ const CashierInventory = () => {
   
   const openRegisterPartModal = () => {
     setShowRegisterPartModal(true);
-};
+  };
   
   const openEditPartModal = (part) => {
     setSelectedPart(part);
@@ -107,11 +132,13 @@ const CashierInventory = () => {
   const handlePartAdded = () => {
     fetchStocks();
     fetchParts();
+    fetchStockBatches();
     setShowAddPartModal(false);
   };
 
   const handleStockAdded = () => {
     fetchStocks();
+    fetchStockBatches();
     setShowAddStockModal(false);
   };
   
@@ -123,6 +150,7 @@ const CashierInventory = () => {
   useEffect(() => {
     fetchStocks();
     fetchParts();
+    fetchStockBatches();
   }, []);
 
   // Helper function to safely format currency
@@ -135,6 +163,12 @@ const CashierInventory = () => {
       return `$${numValue.toFixed(2)}`;
     }
     return '$0.00';
+  };
+
+  // Helper function to safely format date
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString();
   };
 
   // Helper function to safely calculate total value
@@ -174,6 +208,15 @@ const CashierInventory = () => {
       []
   );
   
+  // Filter stock batches based on search term
+  const filteredStockBatches = stockBatches.filter(batch => 
+    batch.BatchID.toString().includes(stockBatchesSearchTerm) || 
+    batch.PartID.toString().includes(stockBatchesSearchTerm) ||
+    batch.BatchNumber?.toString().includes(stockBatchesSearchTerm) ||
+    batch.PartName?.toLowerCase().includes(stockBatchesSearchTerm.toLowerCase()) ||
+    batch.SupplierName?.toLowerCase().includes(stockBatchesSearchTerm.toLowerCase())
+  );
+  
   // Filter parts based on search term
   const filteredParts = parts.filter(part => 
     part.PartID.toString().includes(partsSearchTerm) || 
@@ -195,14 +238,14 @@ const CashierInventory = () => {
             <div className="mb-4 flex justify-between items-center">
               <h2 className="text-2xl font-semibold text-[#9A67EA]">Parts</h2>
               <button 
-                            className="bg-[#7A40C2] hover:bg-[#6b38b3] text-white px-4 py-2 rounded-full transition-colors flex items-center text-sm"
-                            onClick={openRegisterPartModal}
-                          >
-                            <svg className="w-4 h-4 mr-2" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
-                              <path d="M12 4v16m8-8H4"></path>
-                            </svg>
-                            Add New Part
-                          </button>
+                className="bg-[#7A40C2] hover:bg-[#6b38b3] text-white px-4 py-2 rounded-full transition-colors flex items-center text-sm"
+                onClick={openRegisterPartModal}
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
+                  <path d="M12 4v16m8-8H4"></path>
+                </svg>
+                Add New Part
+              </button>
             </div>
             
             {/* Parts Search Bar */}
@@ -287,7 +330,20 @@ const CashierInventory = () => {
           {/* Right Column: Stock Shipments (wider) */}
           <div className="md:col-span-2">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-semibold text-[#9A67EA]">Stock Shipments</h2>
+              <div className="flex space-x-4">
+                <button 
+                  className={`text-2xl font-semibold ${activeTab === 'stocks' ? 'text-[#9A67EA]' : 'text-gray-400'}`}
+                  onClick={() => setActiveTab('stocks')}
+                >
+                  Stock Shipments
+                </button>
+                <button 
+                  className={`text-2xl font-semibold ${activeTab === 'batches' ? 'text-[#9A67EA]' : 'text-gray-400'}`}
+                  onClick={() => setActiveTab('batches')}
+                >
+                  Stock Batches
+                </button>
+              </div>
               <button 
                 className="bg-[#7A40C2] hover:bg-[#6b38b3] text-white px-4 py-2 rounded-full transition-colors flex items-center"
                 onClick={openAddStockModal}
@@ -299,97 +355,181 @@ const CashierInventory = () => {
               </button>
             </div>
 
-            {/* Search and Filter */}
-            <div className="flex flex-wrap gap-4 mb-4">
-              <div className="flex-grow">
-                <input
-                  type="text"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#9A67EA] bg-white/80"
-                  placeholder="Search by Stock ID or Supplier ID..."
-                  value={stockSearchTerm}
-                  onChange={(e) => setStockSearchTerm(e.target.value)}
-                />
-              </div>
-              <div className="w-full sm:w-auto">
-                <select
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#9A67EA] bg-white/80"
-                  value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value)}
-                >
-                  <option value="">All Dates</option>
-                  {uniqueDates.map(date => (
-                    <option key={date} value={date}>{date}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Error Message */}
-            {error && (
-              <div className="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative">
-                <span className="block sm:inline">{error}</span>
-              </div>
-            )}
-
-            {isLoading ? (
-              <div className="flex justify-center items-center h-40">
-                <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#9A67EA]"></div>
-              </div>
-            ) : filteredStocks.length > 0 ? (
-              <div className="rounded-3xl shadow-xl p-4 bg-gradient-to-br from-[#e3d2f7] to-[#d9baf4] border border-white/40 h-[400px] overflow-hidden">
-                <div className="overflow-x-auto overflow-y-auto h-full">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-white/50 sticky top-0">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Stock ID</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Date</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Supplier ID</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Items Count</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Add Part</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white/30 divide-y divide-gray-200">
-                      {filteredStocks.map((stock) => (
-                        <tr key={stock.StockID} className="hover:bg-white/50 transition-colors">
-                          <td className="px-6 py-4 text-sm font-medium text-gray-900">#{stock.StockID}</td>
-                          <td className="px-6 py-4 text-sm text-gray-700">{new Date(stock.Date).toLocaleDateString()}</td>
-                          <td className="px-6 py-4 text-sm text-gray-700">{stock.SupplierID}</td>
-                          <td className="px-6 py-4 text-sm text-gray-700">{stock.stockItems ? stock.stockItems.length : 0}</td>
-                          <td className="px-6 py-4 text-sm text-gray-700">
-                            <button
-                              className="bg-[#7A40C2] hover:bg-[#6b38b3] text-white px-4 py-1 rounded-full text-sm transition-colors"
-                              onClick={() => openAddPartModal(stock.StockID)}
-                            >
-                              Add Part
-                            </button>
-                          </td>
-                        </tr>
+            {activeTab === 'stocks' ? (
+              <>
+                {/* Search and Filter for Stocks */}
+                <div className="flex flex-wrap gap-4 mb-4">
+                  <div className="flex-grow">
+                    <input
+                      type="text"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#9A67EA] bg-white/80"
+                      placeholder="Search by Stock ID or Supplier ID..."
+                      value={stockSearchTerm}
+                      onChange={(e) => setStockSearchTerm(e.target.value)}
+                    />
+                  </div>
+                  <div className="w-full sm:w-auto">
+                    <select
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#9A67EA] bg-white/80"
+                      value={dateFilter}
+                      onChange={(e) => setDateFilter(e.target.value)}
+                    >
+                      <option value="">All Dates</option>
+                      {uniqueDates.map(date => (
+                        <option key={date} value={date}>{date}</option>
                       ))}
-                    </tbody>
-                  </table>
+                    </select>
+                  </div>
                 </div>
-              </div>
+
+                {/* Error Message */}
+                {error && (
+                  <div className="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative">
+                    <span className="block sm:inline">{error}</span>
+                  </div>
+                )}
+
+                {isLoading ? (
+                  <div className="flex justify-center items-center h-40">
+                    <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#9A67EA]"></div>
+                  </div>
+                ) : filteredStocks.length > 0 ? (
+                  <div className="rounded-3xl shadow-xl p-4 bg-gradient-to-br from-[#e3d2f7] to-[#d9baf4] border border-white/40 h-[400px] overflow-hidden">
+                    <div className="overflow-x-auto overflow-y-auto h-full">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-white/50 sticky top-0">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Stock ID</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Date</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Supplier ID</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Items Count</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Add Part</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white/30 divide-y divide-gray-200">
+                          {filteredStocks.map((stock) => (
+                            <tr key={stock.StockID} className="hover:bg-white/50 transition-colors">
+                              <td className="px-6 py-4 text-sm font-medium text-gray-900">#{stock.StockID}</td>
+                              <td className="px-6 py-4 text-sm text-gray-700">{new Date(stock.Date).toLocaleDateString()}</td>
+                              <td className="px-6 py-4 text-sm text-gray-700">{stock.SupplierID}</td>
+                              <td className="px-6 py-4 text-sm text-gray-700">{stock.stockItems ? stock.stockItems.length : 0}</td>
+                              <td className="px-6 py-4 text-sm text-gray-700">
+                                <button
+                                  className="bg-[#7A40C2] hover:bg-[#6b38b3] text-white px-4 py-1 rounded-full text-sm transition-colors"
+                                  onClick={() => openAddPartModal(stock.StockID)}
+                                >
+                                  Add Part
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-3xl shadow-xl p-6 bg-gradient-to-br from-[#e3d2f7] to-[#d9baf4] border border-white/40 text-center h-[400px] flex items-center justify-center">
+                    <p className="text-gray-600">No stocks found in inventory.</p>
+                  </div>
+                )}
+              </>
             ) : (
-              <div className="rounded-3xl shadow-xl p-6 bg-gradient-to-br from-[#e3d2f7] to-[#d9baf4] border border-white/40 text-center h-[400px] flex items-center justify-center">
-                <p className="text-gray-600">No stocks found in inventory.</p>
-              </div>
+              <>
+                {/* Search for Stock Batches */}
+                <div className="flex flex-wrap gap-4 mb-4">
+                  <div className="flex-grow">
+                    <input
+                      type="text"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#9A67EA] bg-white/80"
+                      placeholder="Search by Batch ID, Part ID, Part Name or Supplier Name..."
+                      value={stockBatchesSearchTerm}
+                      onChange={(e) => setStockBatchesSearchTerm(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* Error Message */}
+                {batchesError && (
+                  <div className="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative">
+                    <span className="block sm:inline">{batchesError}</span>
+                  </div>
+                )}
+
+                {isLoadingBatches ? (
+                  <div className="flex justify-center items-center h-40">
+                    <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#9A67EA]"></div>
+                  </div>
+                ) : filteredStockBatches.length > 0 ? (
+                  <div className="rounded-3xl shadow-xl p-4 bg-gradient-to-br from-[#e3d2f7] to-[#d9baf4] border border-white/40 h-[400px] overflow-hidden">
+                    <div className="overflow-x-auto overflow-y-auto h-full">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-white/50 sticky top-0">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Batch ID</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Part</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Batch #</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Initial Qty</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Remaining</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Cost</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Retail</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Receipt Date</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Expiry</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white/30 divide-y divide-gray-200">
+                          {filteredStockBatches.map((batch) => (
+                            <tr key={batch.BatchID} className="hover:bg-white/50 transition-colors">
+                              <td className="px-6 py-4 text-sm font-medium text-gray-900">#{batch.BatchID}</td>
+                              <td className="px-6 py-4 text-sm text-gray-700">
+                                <div>{batch.PartID}: {batch.PartName || 'N/A'}</div>
+                                <div className="text-xs text-gray-500">{batch.PartDescription || ''}</div>
+                              </td>
+                              <td className="px-6 py-4 text-sm text-gray-700">{batch.BatchNumber || 'N/A'}</td>
+                              <td className="px-6 py-4 text-sm text-gray-700">{batch.InitialQuantity}</td>
+                              <td className="px-6 py-4 text-sm text-gray-700">
+                                <span className={`${batch.RemainingQuantity <= 5 ? 'text-red-600 font-semibold' : ''}`}>
+                                  {batch.RemainingQuantity}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 text-sm text-gray-700">{formatCurrency(batch.CostPrice)}</td>
+                              <td className="px-6 py-4 text-sm text-gray-700">{formatCurrency(batch.RetailPrice)}</td>
+                              <td className="px-6 py-4 text-sm text-gray-700">{formatDate(batch.ReceiptDate)}</td>
+                              <td className="px-6 py-4 text-sm text-gray-700">
+                                {batch.ExpiryDate ? (
+                                  <span className={`${new Date(batch.ExpiryDate) < new Date() ? 'text-red-600 font-semibold' : ''}`}>
+                                    {formatDate(batch.ExpiryDate)}
+                                  </span>
+                                ) : 'N/A'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-3xl shadow-xl p-6 bg-gradient-to-br from-[#e3d2f7] to-[#d9baf4] border border-white/40 text-center h-[400px] flex items-center justify-center">
+                    <p className="text-gray-600">No stock batches found.</p>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
         
-        {/* Bottom row: Full-width Stock Items Table */}
-        <div>
-          <h2 className="text-2xl font-semibold mb-4 text-[#9A67EA]">Stock Items</h2>
-          
-          {/* Search bar for stock items */}
-          <div className="mb-4">
-            <input
-              type="text"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#9A67EA] bg-white/80"
-              placeholder="Search by Part ID or Stock ID..."
-              value={stockItemsSearchTerm}
-              onChange={(e) => setStockItemsSearchTerm(e.target.value)}
-            />
+        {/* Bottom section for Stock Items */}
+        <div className="mt-8">
+          <div className="mb-4 flex justify-between items-center">
+            <h2 className="text-2xl font-semibold text-[#9A67EA]">Stock Items</h2>
+            <div>
+              <input
+                type="text"
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#9A67EA] bg-white/80"
+                placeholder="Search stock items..."
+                value={stockItemsSearchTerm}
+                onChange={(e) => setStockItemsSearchTerm(e.target.value)}
+              />
+            </div>
           </div>
           
           <div className="rounded-3xl shadow-xl p-4 bg-gradient-to-br from-[#e3d2f7] to-[#d9baf4] border border-white/40 h-[400px] overflow-hidden">
@@ -448,12 +588,12 @@ const CashierInventory = () => {
       )}
 
       {showRegisterPartModal && (
-  <RegisterPartModal
-    isOpen={showRegisterPartModal}
-    onClose={() => setShowRegisterPartModal(false)}
-    onPartRegistered={handlePartAdded}  // Changed to match the prop name expected by the modal
-  />
-)}
+        <RegisterPartModal
+          isOpen={showRegisterPartModal}
+          onClose={() => setShowRegisterPartModal(false)}
+          onPartRegistered={handlePartAdded}
+        />
+      )}
       
       {/* {showEditPartModal && (
         <EditPartModal
