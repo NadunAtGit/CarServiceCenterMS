@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FiSearch, FiPlus, FiRefreshCcw } from "react-icons/fi";
 import { AiOutlineInfoCircle, AiOutlineDelete } from "react-icons/ai";
-import axiosInstance from '../../utils/AxiosInstance';
+import axiosInstance from '../../utils/axiosInstance';
 import Modal from "react-modal";
 import AddEmployee from '../../components/Modals/AddEmployee';
 import EmployeeDataModal from '../../components/Modals/EmployeeDataModal';

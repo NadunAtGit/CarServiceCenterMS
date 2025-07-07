@@ -9,7 +9,10 @@ const AddPartModal = ({ stockId, onClose, onPartAdded }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [fieldErrors, setFieldErrors] = useState({
-    notes: null
+    notes: null,
+    stockPrice: null,
+    retailPrice: null,
+    quantity: null
   });
   const [newPart, setNewPart] = useState({
     partId: '',
@@ -42,10 +45,53 @@ const AddPartModal = ({ stockId, onClose, onPartAdded }) => {
     }
   };
 
+  // Validate form before submission
+  const validateForm = () => {
+    let isValid = true;
+    const errors = {
+      stockPrice: null,
+      retailPrice: null,
+      quantity: null,
+      notes: null
+    };
+
+    // Check if stock price is negative
+    if (parseFloat(newPart.StockPrice) < 0) {
+      errors.stockPrice = "Stock price cannot be negative";
+      isValid = false;
+    }
+
+    // Check if retail price is negative
+    if (parseFloat(newPart.RetailPrice) < 0) {
+      errors.retailPrice = "Retail price cannot be negative";
+      isValid = false;
+    }
+
+    // Check if retail price is less than stock price
+    if (parseFloat(newPart.RetailPrice) <= parseFloat(newPart.StockPrice)) {
+      errors.retailPrice = "Retail price must be greater than stock price";
+      isValid = false;
+    }
+
+    // Check if quantity is negative
+    if (parseInt(newPart.Quantity) < 0) {
+      errors.quantity = "Quantity cannot be negative";
+      isValid = false;
+    }
+
+    setFieldErrors(errors);
+    return isValid;
+  };
+
   const handleAddPart = async (e) => {
     e.preventDefault();
     setError(null);
-    setFieldErrors({ notes: null });
+    
+    // Validate form before submission
+    if (!validateForm()) {
+      return;
+    }
+    
     setIsSubmitting(true);
     
     try {
@@ -168,6 +214,66 @@ const AddPartModal = ({ stockId, onClose, onPartAdded }) => {
     }
   };
 
+  // Handle Stock Price Change with validation
+  const handleStockPriceChange = (e) => {
+    const value = e.target.value;
+    // Only allow positive numbers
+    if (value === '' || parseFloat(value) >= 0) {
+      setNewPart({ ...newPart, StockPrice: value });
+      
+      // Clear stockPrice error if it exists
+      if (fieldErrors.stockPrice) {
+        setFieldErrors(prev => ({ ...prev, stockPrice: null }));
+      }
+      
+      // Check if retail price needs to be updated based on stock price
+      if (value !== '' && newPart.RetailPrice !== '' && parseFloat(newPart.RetailPrice) <= parseFloat(value)) {
+        setFieldErrors(prev => ({ 
+          ...prev, 
+          retailPrice: "Retail price must be greater than stock price" 
+        }));
+      } else if (fieldErrors.retailPrice && value !== '' && newPart.RetailPrice !== '' && parseFloat(newPart.RetailPrice) > parseFloat(value)) {
+        setFieldErrors(prev => ({ ...prev, retailPrice: null }));
+      }
+    }
+  };
+
+  // Handle Retail Price Change with validation
+  const handleRetailPriceChange = (e) => {
+    const value = e.target.value;
+    // Only allow positive numbers
+    if (value === '' || parseFloat(value) >= 0) {
+      setNewPart({ ...newPart, RetailPrice: value });
+      
+      // Clear retailPrice error if it exists
+      if (fieldErrors.retailPrice) {
+        setFieldErrors(prev => ({ ...prev, retailPrice: null }));
+      }
+      
+      // Check retail price relation to stock price
+      if (value !== '' && newPart.StockPrice !== '' && parseFloat(value) <= parseFloat(newPart.StockPrice)) {
+        setFieldErrors(prev => ({ 
+          ...prev, 
+          retailPrice: "Retail price must be greater than stock price" 
+        }));
+      }
+    }
+  };
+
+  // Handle Quantity Change with validation
+  const handleQuantityChange = (e) => {
+    const value = e.target.value;
+    // Only allow positive numbers
+    if (value === '' || parseInt(value) >= 0) {
+      setNewPart({ ...newPart, Quantity: value });
+      
+      // Clear quantity error if it exists
+      if (fieldErrors.quantity) {
+        setFieldErrors(prev => ({ ...prev, quantity: null }));
+      }
+    }
+  };
+
   useEffect(() => {
     fetchParts();
   }, []);
@@ -222,12 +328,18 @@ const AddPartModal = ({ stockId, onClose, onPartAdded }) => {
             <input
               type="number"
               step="0.01"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#9A67EA] bg-white/80"
+              min="0"
+              className={`w-full px-3 py-2 border ${fieldErrors.stockPrice ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:outline-none focus:ring-2 focus:ring-[#9A67EA] bg-white/80`}
               value={newPart.StockPrice}
-              onChange={(e) => setNewPart({ ...newPart, StockPrice: e.target.value })}
+              onChange={handleStockPriceChange}
               required
               disabled={isSubmitting}
             />
+            {fieldErrors.stockPrice && (
+              <p className="text-xs text-red-600 mt-1 font-medium">
+                {fieldErrors.stockPrice}
+              </p>
+            )}
           </div>
 
           <div className="mb-4">
@@ -235,24 +347,37 @@ const AddPartModal = ({ stockId, onClose, onPartAdded }) => {
             <input
               type="number"
               step="0.01"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#9A67EA] bg-white/80"
+              min="0"
+              className={`w-full px-3 py-2 border ${fieldErrors.retailPrice ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:outline-none focus:ring-2 focus:ring-[#9A67EA] bg-white/80`}
               value={newPart.RetailPrice}
-              onChange={(e) => setNewPart({ ...newPart, RetailPrice: e.target.value })}
+              onChange={handleRetailPriceChange}
               required
               disabled={isSubmitting}
             />
+            {fieldErrors.retailPrice && (
+              <p className="text-xs text-red-600 mt-1 font-medium">
+                {fieldErrors.retailPrice}
+              </p>
+            )}
+            <p className="text-xs text-gray-500 mt-1">Must be greater than stock price</p>
           </div>
 
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
             <input
               type="number"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#9A67EA] bg-white/80"
+              min="0"
+              className={`w-full px-3 py-2 border ${fieldErrors.quantity ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:outline-none focus:ring-2 focus:ring-[#9A67EA] bg-white/80`}
               value={newPart.Quantity}
-              onChange={(e) => setNewPart({ ...newPart, Quantity: e.target.value })}
+              onChange={handleQuantityChange}
               required
               disabled={isSubmitting}
             />
+            {fieldErrors.quantity && (
+              <p className="text-xs text-red-600 mt-1 font-medium">
+                {fieldErrors.quantity}
+              </p>
+            )}
           </div>
 
           {/* New fields for batch tracking */}

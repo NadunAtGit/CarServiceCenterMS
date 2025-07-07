@@ -255,7 +255,7 @@ if (departmentRevenueResponse.data?.success) {
                   <p className="text-gray-500 text-sm font-medium">Total Sales <span className="text-xs">({new Date().toLocaleString('default', { month: 'long' })} 2025)</span></p>
                   <h3 className="text-2xl font-bold text-gray-800 mt-1">${dashboardData.totalSales.toLocaleString()}</h3>
                   <div className="flex items-center mt-2">
-                    {dashboardData.salesGrowth > 0 ? (
+                    {/* {dashboardData.salesGrowth > 0 ? (
                       <>
                         <AiOutlineRise className="text-green-500" />
                         <span className="text-green-500 text-sm ml-1">{dashboardData.salesGrowth}%</span>
@@ -265,7 +265,7 @@ if (departmentRevenueResponse.data?.success) {
                         <AiOutlineFall className="text-red-500" />
                         <span className="text-red-500 text-sm ml-1">{Math.abs(dashboardData.salesGrowth)}%</span>
                       </>
-                    )}
+                    )} */}
                     <span className="text-gray-500 text-xs ml-2">vs last month</span>
                   </div>
                 </div>
@@ -282,7 +282,7 @@ if (departmentRevenueResponse.data?.success) {
                   <p className="text-gray-500 text-sm font-medium">Appointments</p>
                   <h3 className="text-2xl font-bold text-gray-800 mt-1">{dashboardData.totalAppointments}</h3>
                   <div className="flex items-center mt-2">
-                    {dashboardData.appointmentGrowth > 0 ? (
+                    {/* {dashboardData.appointmentGrowth > 0 ? (
                       <>
                         <AiOutlineRise className="text-green-500" />
                         <span className="text-green-500 text-sm ml-1">{dashboardData.appointmentGrowth}%</span>
@@ -292,7 +292,7 @@ if (departmentRevenueResponse.data?.success) {
                         <AiOutlineFall className="text-red-500" />
                         <span className="text-red-500 text-sm ml-1">{Math.abs(dashboardData.appointmentGrowth)}%</span>
                       </>
-                    )}
+                    )} */}
                     <span className="text-gray-500 text-xs ml-2">vs last month</span>
                   </div>
                 </div>
@@ -325,7 +325,7 @@ if (departmentRevenueResponse.data?.success) {
                   <p className="text-gray-500 text-sm font-medium">Services <span className="text-xs">({new Date().toLocaleString('default', { month: 'long' })} 2025)</span></p>
                   <h3 className="text-2xl font-bold text-gray-800 mt-1">{dashboardData.totalServices.toLocaleString()}</h3>
                   <div className="flex items-center mt-2">
-                    {dashboardData.servicesGrowth > 0 ? (
+                    {/* {dashboardData.servicesGrowth > 0 ? (
                       <>
                         <AiOutlineRise className="text-green-500" />
                         <span className="text-green-500 text-sm ml-1">{dashboardData.servicesGrowth}%</span>
@@ -335,7 +335,7 @@ if (departmentRevenueResponse.data?.success) {
                         <AiOutlineFall className="text-red-500" />
                         <span className="text-red-500 text-sm ml-1">{Math.abs(dashboardData.servicesGrowth)}%</span>
                       </>
-                    ) : null}
+                    ) : null} */}
                     <span className="text-gray-500 text-xs ml-2">vs last month</span>
                   </div>
                 </div>
@@ -423,7 +423,7 @@ if (departmentRevenueResponse.data?.success) {
           data={revenueByDepartment}
           margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
         >
-          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f3" />
           <XAxis 
             dataKey="name"  // Department names on X-axis
             tick={{ fontSize: 12 }}
@@ -437,8 +437,8 @@ if (departmentRevenueResponse.data?.success) {
             labelFormatter={(name) => `Department: ${name}`}
             contentStyle={{
               backgroundColor: 'rgba(255, 255, 255, 0.9)',
-              border: '1px solid #944EF8',
-              borderRadius: '8px'
+              border: '1px solidrgb(21, 19, 23)',
+              borderRadius: '18px'
             }}
           />
           <Legend />

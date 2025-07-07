@@ -565,14 +565,27 @@ router.post("/mark-attendance", authenticateToken, async (req, res) => {
         const { email, EmployeeID } = req.user; // Get authenticated user's email and EmployeeID
         const { status } = req.body; // Get attendance status from request body
 
+        // Validate required fields
         if (!status) {
             return res.status(400).json({ error: true, message: "Status is required." });
         }
 
+        // Validate status value
         if (!["Present", "Absent", "On Leave"].includes(status)) {
             return res.status(400).json({
                 error: true,
                 message: "Invalid status. Status should be one of 'Present', 'Absent', or 'On Leave'.",
+            });
+        }
+
+        // Check if it's past 9 AM
+        const currentTime = moment();
+        const cutoffTime = moment().set({ hour: 9, minute: 0, second: 0 });
+        
+        if (currentTime.isAfter(cutoffTime)) {
+            return res.status(400).json({
+                error: true,
+                message: "Attendance cannot be marked after 9 AM.",
             });
         }
 

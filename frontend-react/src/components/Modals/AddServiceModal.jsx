@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axiosInstance from '../../utils/axiosInstance';
+import axiosInstance from '../../utils/AxiosInstance';
 
 const AddServiceModal = ({ onClose, onServiceAdded }) => {
   const [formData, setFormData] = useState({
@@ -9,37 +9,68 @@ const AddServiceModal = ({ onClose, onServiceAdded }) => {
     TypeService: 'Repair', // Default selection
     Duration: ''
   });
-  const [error, setError] = useState(null);
+  
+  const [errors, setErrors] = useState({
+    ServiceName: '',
+    Description: '',
+    Price: '',
+    TypeService: '',
+    Duration: ''
+  });
+  
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+    
+    // Clear error when user types
+    if (errors[name]) {
+      setErrors(prev => ({ ...prev, [name]: '' }));
+    }
+  };
+
+  const validateForm = () => {
+    const newErrors = {
+      ServiceName: !formData.ServiceName ? 'Service name is required' : 
+                 formData.ServiceName.length > 100 ? 'Service name cannot exceed 100 characters' : '',
+      Description: formData.Description.length > 500 ? 'Description cannot exceed 500 characters' : '',
+      Price: !formData.Price ? 'Price is required' : 
+            isNaN(formData.Price) || parseFloat(formData.Price) <= 0 ? 
+            'Price must be a positive number' : '',
+      TypeService: !formData.TypeService ? 'Service type is required' : '',
+      Duration: !formData.Duration ? 'Duration is required' : 
+               isNaN(formData.Duration) || parseInt(formData.Duration) <= 0 ? 
+               'Duration must be a positive whole number (minutes)' : ''
+    };
+
+    setErrors(newErrors);
+    return !Object.values(newErrors).some(error => error !== '');
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Form validation
-    if (!formData.ServiceName || !formData.Price || !formData.TypeService || !formData.Duration) {
-      setError('All fields except Description are required');
+    if (!validateForm()) {
       return;
     }
     
     setIsSubmitting(true);
-    setError(null);
     
     try {
-      const response = await axiosInstance.post('api/cashier/services/add', formData);
+      const response = await axiosInstance.post('api/cashier/services/add', {
+        ...formData,
+        Price: parseFloat(formData.Price),
+        Duration: parseInt(formData.Duration)
+      });
       
       if (response.status === 201) {
         onServiceAdded();
-      } else {
-        setError(response.data.message || 'Failed to add service');
+        onClose();
       }
     } catch (error) {
       const errorMessage = error.response?.data?.message || error.message || 'Failed to add service';
-      setError(errorMessage);
+      setErrors(prev => ({ ...prev, form: errorMessage }));
       console.error('Error adding service:', error);
     } finally {
       setIsSubmitting(false);
@@ -54,6 +85,7 @@ const AddServiceModal = ({ onClose, onServiceAdded }) => {
           <button 
             onClick={onClose}
             className="text-gray-500 hover:text-gray-700"
+            disabled={isSubmitting}
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -61,9 +93,9 @@ const AddServiceModal = ({ onClose, onServiceAdded }) => {
           </button>
         </div>
         
-        {error && (
+        {errors.form && (
           <div className="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative">
-            <span className="block sm:inline">{error}</span>
+            <span className="block sm:inline">{errors.form}</span>
           </div>
         )}
         
@@ -77,10 +109,11 @@ const AddServiceModal = ({ onClose, onServiceAdded }) => {
               name="ServiceName"
               value={formData.ServiceName}
               onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#9A67EA]"
+              className={`w-full px-3 py-2 border ${errors.ServiceName ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:outline-none focus:ring-2 focus:ring-[#9A67EA]`}
               placeholder="Enter service name"
-              required
+              maxLength="100"
             />
+            {errors.ServiceName && <p className="mt-1 text-sm text-red-600">{errors.ServiceName}</p>}
           </div>
           
           <div className="mb-4">
@@ -91,10 +124,13 @@ const AddServiceModal = ({ onClose, onServiceAdded }) => {
               name="Description"
               value={formData.Description}
               onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#9A67EA]"
+              className={`w-full px-3 py-2 border ${errors.Description ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:outline-none focus:ring-2 focus:ring-[#9A67EA]`}
               placeholder="Enter service description"
               rows="3"
+              maxLength="500"
             />
+            {errors.Description && <p className="mt-1 text-sm text-red-600">{errors.Description}</p>}
+            <p className="text-xs text-gray-500 mt-1">{formData.Description.length}/500 characters</p>
           </div>
           
           <div className="mb-4">
@@ -106,12 +142,12 @@ const AddServiceModal = ({ onClose, onServiceAdded }) => {
               name="Price"
               value={formData.Price}
               onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#9A67EA]"
+              className={`w-full px-3 py-2 border ${errors.Price ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:outline-none focus:ring-2 focus:ring-[#9A67EA]`}
               placeholder="Enter service price"
               step="0.01"
               min="0"
-              required
             />
+            {errors.Price && <p className="mt-1 text-sm text-red-600">{errors.Price}</p>}
           </div>
           
           <div className="mb-4">
@@ -122,13 +158,13 @@ const AddServiceModal = ({ onClose, onServiceAdded }) => {
               name="TypeService"
               value={formData.TypeService}
               onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#9A67EA] bg-white"
-              required
+              className={`w-full px-3 py-2 border ${errors.TypeService ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:outline-none focus:ring-2 focus:ring-[#9A67EA] bg-white`}
             >
               <option value="Repair">Repair</option>
               <option value="Maintenance">Maintenance</option>
               <option value="Inspection">Inspection</option>
             </select>
+            {errors.TypeService && <p className="mt-1 text-sm text-red-600">{errors.TypeService}</p>}
           </div>
           
           <div className="mb-6">
@@ -140,11 +176,11 @@ const AddServiceModal = ({ onClose, onServiceAdded }) => {
               name="Duration"
               value={formData.Duration}
               onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#9A67EA]"
+              className={`w-full px-3 py-2 border ${errors.Duration ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:outline-none focus:ring-2 focus:ring-[#9A67EA]`}
               placeholder="Enter duration in minutes"
               min="1"
-              required
             />
+            {errors.Duration && <p className="mt-1 text-sm text-red-600">{errors.Duration}</p>}
           </div>
           
           <div className="flex justify-end space-x-4">

@@ -30,6 +30,7 @@ import CashierPayments from './pages/Cashier/CashierPayments';
 import CashierReports from './pages/Cashier/CashierReports';
 import CashierInventory from './pages/Cashier/CashierInventory';
 import CashierServices from './pages/Cashier/CashierServices';
+import CashierSuppliers from './pages/Cashier/CashierSuppliers';
 
 import DriverHome from './pages/Driver/DriverHome';
 import DriverDashboard from './pages/Driver/DriverDashboard';
@@ -141,6 +142,7 @@ const App = () => {
                 <Route path="reports" element={<CashierReports />} />
                 <Route path="inventory" element={<CashierInventory />} />
                 <Route path="services" element={<CashierServices />} />
+                <Route path="suppliers" element={<CashierSuppliers />} />
           </Route>
 
       </Routes>

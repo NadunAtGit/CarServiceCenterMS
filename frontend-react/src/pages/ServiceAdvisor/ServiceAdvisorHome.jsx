@@ -89,7 +89,7 @@ const ServiceAdvisorHome = () => {
             <UserData 
               username={userInfo?.username || "N/A"} 
               role={userInfo?.role || "N/A"} 
-              imgUrl={userInfo?.imageUrl || "https://via.placeholder.com/150"}
+              imgUrl={userInfo?.imageUrl || "https://ipltable.in/wp-content/uploads/2024/02/image-46.jpeg"}
             />
           ) : (
             <div className="flex items-center justify-center mt-10">

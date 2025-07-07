@@ -350,7 +350,7 @@ const ServiceAdvisorJobCards = () => {
                     <td className="py-3 px-4 max-w-xs truncate hidden md:table-cell text-gray-700">{jobcard.ServiceDetails}</td>
                     <td className="py-3 px-4 flex gap-3 items-center">
                       <AiOutlineInfoCircle className="text-[#944EF8] cursor-pointer hover:text-[#7a3dd0] transition-colors" size={22} />
-                      <FiRefreshCcw className="text-amber-500 cursor-pointer hover:text-amber-600 transition-colors" size={22} />
+                      {/* <FiRefreshCcw className="text-amber-500 cursor-pointer hover:text-amber-600 transition-colors" size={22} /> */}
                       <AiOutlineDelete className="text-red-400 cursor-pointer hover:text-red-500 transition-colors" size={22} />
                     </td>
                   </tr>

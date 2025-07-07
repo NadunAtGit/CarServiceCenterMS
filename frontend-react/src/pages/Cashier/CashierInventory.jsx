@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import axiosInstance from '../../utils/axiosInstance';
+import axiosInstance from '../../utils/AxiosInstance';
 import AddPartModal from '../../components/Modals/AddPartModal';
 import AddStockModal from '../../components/Modals/AddStockModal';
 import RegisterPartModal from '../../components/Modals/RegisterPartModal';

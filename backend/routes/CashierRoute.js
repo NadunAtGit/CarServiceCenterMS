@@ -2423,7 +2423,364 @@ router.get("/pending-invoices", authenticateToken, authorizeRoles(['Cashier']), 
 
   
 
+router.post("/create-supplier", authenticateToken, authorizeRoles(['Cashier']), async (req, res) => {
+    console.log("Request received:", req.body);
+    const { name, email, telephone, address } = req.body;
 
+    // Convert to expected backend format
+    const Name = name;
+    const Email = email;
+    const Telephone = telephone;
+    const Address = address;
+
+    if (!Name || !Email || !Telephone || !Address) {
+        console.log("Missing parameters");
+        return res.status(400).json({ error: true, message: "All parameters required" });
+    }
+    
+    // Validate email and phone
+    if (!validateEmail(Email)) {
+        return res.status(400).json({ error: "Invalid email format" });
+    }
+    if (!validatePhoneNumber(Telephone)) {
+        return res.status(400).json({ error: "Invalid phone number format" });
+    }
+
+    try {
+        // Check if the supplier already exists with the same email
+        const supplierQuery = "SELECT * FROM Suppliers WHERE Email = ?";
+        const existingSupplier = await new Promise((resolve, reject) => {
+            db.query(supplierQuery, [Email], (err, result) => {
+                if (err) return reject(err);
+                resolve(result.length > 0 ? result[0] : null);
+            });
+        });
+
+        if (existingSupplier) {
+            return res.status(400).json({ error: true, message: "Supplier with this email already exists" });
+        }
+
+        // Generate a new SupplierID (S-0001, S-0002, etc.)
+        const SupplierID = await generateSupplierId();
+
+        // Insert new supplier into the database
+        const insertQuery = `INSERT INTO Suppliers (SupplierID, Name, Email, Telephone, Address)
+                            VALUES (?, ?, ?, ?, ?)`;
+        await new Promise((resolve, reject) => {
+            db.query(insertQuery, [SupplierID, Name, Email, Telephone, Address], (err, result) => {
+                if (err) return reject(err);
+                resolve(result);
+            });
+        });
+
+        console.log("New Supplier Created:", SupplierID);
+
+        return res.status(201).json({
+            error: false,
+            supplier: {
+                SupplierID,
+                Name,
+                Email,
+                Telephone,
+                Address
+            },
+            message: "Supplier created successfully"
+        });
+
+    } catch (error) {
+        console.error("Error in /create-supplier:", error);
+        return res.status(500).json({ error: true, message: "Server error" });
+    }
+});
+
+
+router.get("/all-suppliers", authenticateToken, authorizeRoles(["Cashier"]), async (req, res) => {
+    try {
+        const query = "SELECT * FROM Suppliers";
+        
+        db.query(query, (err, result) => {
+            if (err) {
+                console.error("Database query error:", err);
+                return res.status(500).json({ error: true, message: "Internal server error" });
+            }
+
+            return res.status(200).json({
+                success: true,
+                suppliers: result,
+            });
+        });
+
+    } catch (error) {
+        console.error("Unexpected error in /all-suppliers:", error);
+        return res.status(500).json({ error: true, message: "Something went wrong" });
+    }
+});
+
+
+router.delete("/delete-supplier/:id", authenticateToken, authorizeRoles(["Cashier"]), async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!id) {
+            return res.status(400).json({ error: true, message: "Supplier ID is required" });
+        }
+
+        // Begin a transaction to ensure all operations are atomic
+        db.beginTransaction(async (err) => {
+            if (err) {
+                console.error("Error starting transaction:", err);
+                return res.status(500).json({ error: true, message: "Database transaction error" });
+            }
+
+            try {
+                // First, check if supplier exists
+                const supplierQuery = "SELECT * FROM Suppliers WHERE SupplierID = ?";
+                const supplier = await new Promise((resolve, reject) => {
+                    db.query(supplierQuery, [id], (err, result) => {
+                        if (err) reject(err);
+                        resolve(result[0]);
+                    });
+                });
+
+                if (!supplier) {
+                    db.rollback();
+                    return res.status(404).json({ error: true, message: "Supplier not found" });
+                }
+
+                // Check for references in Stock table
+                const stockCheckQuery = "SELECT COUNT(*) as count FROM Stock WHERE SupplierID = ?";
+                const stockCount = await new Promise((resolve, reject) => {
+                    db.query(stockCheckQuery, [id], (err, result) => {
+                        if (err) reject(err);
+                        resolve(result[0].count);
+                    });
+                });
+
+                // If there are stock references, don't allow deletion
+                if (stockCount > 0) {
+                    db.rollback();
+                    return res.status(400).json({ 
+                        error: true, 
+                        message: "Cannot delete supplier: This supplier has associated stock records.",
+                        references: {
+                            stock: stockCount,
+                            total: stockCount
+                        }
+                    });
+                }
+
+                // Now delete the supplier
+                const deleteQuery = "DELETE FROM Suppliers WHERE SupplierID = ?";
+                await new Promise((resolve, reject) => {
+                    db.query(deleteQuery, [id], (err, result) => {
+                        if (err) reject(err);
+                        resolve(result);
+                    });
+                });
+
+                // Commit the transaction
+                db.commit((err) => {
+                    if (err) {
+                        console.error("Error committing transaction:", err);
+                        db.rollback();
+                        return res.status(500).json({ error: true, message: "Database transaction error" });
+                    }
+
+                    return res.status(200).json({
+                        success: true,
+                        message: "Supplier deleted successfully.",
+                    });
+                });
+
+            } catch (error) {
+                console.error("Error in delete-supplier transaction:", error);
+                db.rollback();
+                return res.status(500).json({ error: true, message: "Internal server error" });
+            }
+        });
+    } catch (error) {
+        console.error("Unexpected error in /delete-supplier:", error);
+        return res.status(500).json({ error: true, message: "Something went wrong" });
+    }
+});
+
+router.get("/invoices", authenticateToken, authorizeRoles(["Admin", "Cashier"]), async (req, res) => {
+    try {
+        // Extract query parameters for pagination and filtering
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const offset = (page - 1) * limit;
+        const status = req.query.status || null; // Optional filter by payment status
+        const startDate = req.query.startDate || null; // Optional filter by date range
+        const endDate = req.query.endDate || null;
+        const search = req.query.search || null; // Optional search term
+
+        // Build the base query
+        let query = `
+            SELECT i.*, j.JobCardID, j.AppointmentID, 
+                  DATE_FORMAT(i.GeneratedDate, '%Y-%m-%d') as FormattedDate,
+                  e.Name as GeneratedByName 
+            FROM Invoice i
+            LEFT JOIN JobCards j ON i.JobCard_ID = j.JobCardID
+            LEFT JOIN Employees e ON i.GeneratedBy = e.EmployeeID
+            WHERE 1=1
+        `;
+        
+        // Build params array for prepared statement
+        let params = [];
+        
+        // Add filters if provided
+        if (status) {
+            query += " AND i.PaidStatus = ?";
+            params.push(status);
+        }
+        
+        if (startDate && endDate) {
+            query += " AND i.GeneratedDate BETWEEN ? AND ?";
+            params.push(startDate, endDate);
+        }
+        
+        if (search) {
+            query += " AND (i.Invoice_ID LIKE ? OR j.JobCardID LIKE ?)";
+            params.push(`%${search}%`, `%${search}%`);
+        }
+        
+        // Count total records for pagination
+        const countQuery = `SELECT COUNT(*) as total FROM (${query}) as subquery`;
+        const countResult = await new Promise((resolve, reject) => {
+            db.query(countQuery, params, (err, result) => {
+                if (err) {
+                    console.error("Error counting invoices:", err);
+                    return reject(err);
+                }
+                resolve(result);
+            });
+        });
+        
+        const totalRecords = countResult[0].total;
+        const totalPages = Math.ceil(totalRecords / limit);
+        
+        // Add sorting and pagination
+        query += " ORDER BY i.GeneratedDate DESC LIMIT ? OFFSET ?";
+        params.push(limit, offset);
+        
+        // Execute the final query
+        const invoices = await new Promise((resolve, reject) => {
+            db.query(query, params, (err, result) => {
+                if (err) {
+                    console.error("Error fetching invoices:", err);
+                    return reject(err);
+                }
+                resolve(result);
+            });
+        });
+        
+        // For each invoice, get its details (parts and services)
+        for (let invoice of invoices) {
+            // Get parts used
+            const partsQuery = `
+                SELECT p.PartID, p.Name, pu.Quantity, pu.UnitPrice, pu.TotalPrice
+                FROM Parts_Used pu
+                JOIN Parts p ON pu.PartID = p.PartID
+                WHERE pu.InvoiceID = ?
+            `;
+            
+            const parts = await new Promise((resolve, reject) => {
+                db.query(partsQuery, [invoice.Invoice_ID], (err, result) => {
+                    if (err) {
+                        console.error("Error fetching invoice parts:", err);
+                        return reject(err);
+                    }
+                    resolve(result);
+                });
+            });
+            
+            invoice.Parts = parts;
+            
+            // Get services performed
+            const servicesQuery = `
+                SELECT sr.ServiceRecord_ID, sr.Description, sr.ServiceType
+                FROM ServiceRecords sr
+                JOIN JobCards j ON sr.JobCardID = j.JobCardID
+                WHERE j.JobCardID = ?
+            `;
+            
+            const services = await new Promise((resolve, reject) => {
+                db.query(servicesQuery, [invoice.JobCard_ID], (err, result) => {
+                    if (err) {
+                        console.error("Error fetching invoice services:", err);
+                        return reject(err);
+                    }
+                    resolve(result);
+                });
+            });
+            
+            invoice.Services = services;
+        }
+        
+        // Return the results
+        res.status(200).json({
+            success: true,
+            data: invoices,
+            pagination: {
+                total: totalRecords,
+                page,
+                pages: totalPages,
+                limit
+            }
+        });
+        
+    } catch (error) {
+        console.error("Error in /invoices endpoint:", error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch invoices",
+            error: error.message
+        });
+    }
+});
+
+
+
+
+
+
+async function generateSupplierId() {
+    try {
+        // Get the highest existing supplier ID
+        const query = "SELECT SupplierID FROM Suppliers ORDER BY SupplierID DESC LIMIT 1";
+        const result = await new Promise((resolve, reject) => {
+            db.query(query, (err, result) => {
+                if (err) reject(err);
+                resolve(result);
+            });
+        });
+
+        let newId;
+        
+        if (result.length === 0) {
+            // No existing suppliers, start with S-0001
+            newId = "S-0001";
+        } else {
+            // Extract the numeric part and increment
+            const lastId = result[0].SupplierID;
+            const matches = lastId.match(/S-(\d+)/);
+            
+            if (matches && matches[1]) {
+                const num = parseInt(matches[1], 10);
+                newId = `S-${(num + 1).toString().padStart(4, '0')}`;
+            } else {
+                // Fallback if the format is different
+                newId = "S-0001";
+            }
+        }
+        
+        return newId;
+    } catch (error) {
+        console.error("Error generating supplier ID:", error);
+        throw error;
+    }
+}
 
 
 

@@ -5,6 +5,8 @@ import { MdSpaceDashboard, MdOutlineEventNote } from 'react-icons/md';
 import { Link, Outlet, useNavigate } from 'react-router-dom';
 import UserData from '../../components/UserData';
 import axiosInstance from '../../utils/axiosInstance';
+import { FaTruck } from "react-icons/fa";
+
 import { toast } from 'react-toastify';
 
 const CashierHome = () => {
@@ -19,7 +21,7 @@ const CashierHome = () => {
       { title: "Payments", icon: <MdOutlineEventNote size={26} />, path: "/cashier/payments" },
       { title: "Store", icon: <FaClipboardList size={26} />, path: "/cashier/inventory" },
       { title: "Services", icon: <FaRegAddressCard size={26} />, path: "/cashier/services" },
-      
+      { title: "Suppliers", icon: <FaTruck size={26} />, path: "/cashier/suppliers" },
     ];
   
     const toggleSidebar = () => {

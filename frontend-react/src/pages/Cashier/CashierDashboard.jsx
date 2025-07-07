@@ -283,7 +283,7 @@ if (recentTransactionsResponse.data.success && recentTransactionsResponse.data.r
 ))}
               </div>
               
-              <div className="mt-6 pt-4 border-t">
+              {/* <div className="mt-6 pt-4 border-t">
                 <h3 className="text-sm font-medium text-gray-500 mb-3">Quick Actions</h3>
                 <div className="grid grid-cols-2 gap-2">
                   <button className="p-2 bg-[#944EF8]/10 text-[#944EF8] rounded-lg text-sm hover:bg-[#944EF8]/20 transition-colors">
@@ -293,7 +293,7 @@ if (recentTransactionsResponse.data.success && recentTransactionsResponse.data.r
                     Process Payment
                   </button>
                 </div>
-              </div>
+              </div> */}
             </div>
           </div>
         </>

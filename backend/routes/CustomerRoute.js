@@ -415,7 +415,8 @@ router.get("/getjobcards/:vehicleno", authenticateToken, authorizeRoles(["Custom
             // Step 2: Get appointments related to this vehicle
             const appointmentQuery = `
                 SELECT AppointmentID FROM Appointments
-                WHERE VehicleID = ? AND Status != 'Cancelled'
+                WHERE VehicleID = ? AND Status NOT IN ('Cancelled', 'Not Confirmed',"Rescheduled")
+
             `;
 
             db.query(appointmentQuery, [vehicleNo], (apptErr, appointments) => {
@@ -1527,7 +1528,7 @@ router.post("/initiate-payhere-payment/:InvoiceID", authenticateToken, authorize
   }
 });
 
-// Add this new route to your backend
+
 router.put("/update-payment-status/:InvoiceID", authenticateToken, authorizeRoles(['Customer']), async (req, res) => {
   try {
     const { InvoiceID } = req.params;
@@ -1718,8 +1719,6 @@ router.post("/payhere-notify", async (req, res) => {
 });
 
 
-
-
 router.get("/paid-invoices", authenticateToken, async (req, res) => {
     try {
       const customerId = req.user.customerId; // Assuming the customer ID is stored in the token
@@ -1767,7 +1766,7 @@ router.get("/paid-invoices", authenticateToken, async (req, res) => {
 async function sendEmail(to, subject, html) {
   try {
     const mailOptions = {
-      from: '"Your App Name" <your-email@gmail.com>',
+      from: '"Your App Name" <nadunbiz27@gmail.com>',
       to,
       subject,
       html,
@@ -2354,7 +2353,7 @@ function getDefaultVehicleImage(model, type) {
 }
 
 
-// Backend option: Modify the backend to allow cascade deletion
+
 router.delete("/vehicle/:id", authenticateToken, authorizeRoles(['Customer']), async (req, res) => {
     try {
         const { id: vehicleNo } = req.params;

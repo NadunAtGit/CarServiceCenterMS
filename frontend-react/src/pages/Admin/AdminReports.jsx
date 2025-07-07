@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FiDownload, FiPrinter, FiFilter, FiCalendar, FiEye } from 'react-icons/fi';
-import axiosInstance from '../../utils/AxiosInstance';
+import axiosInstance from '../../utils/axiosInstance';
 import ReportModal from '../../components/Modals/ReportModal';
 
 const AdminReports = () => {

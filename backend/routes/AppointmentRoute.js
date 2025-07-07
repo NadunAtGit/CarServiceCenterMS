@@ -118,6 +118,29 @@ router.post("/make-appointment", authenticateToken, async (req, res) => {
         console.log("Vehicle Result:", vehicleResult);  // Debugging log
         const vehicleId = vehicleResult[0].VehicleNo;  // Extract the vehicle ID
 
+        // NEW STEP: Check if the vehicle is already booked for the same date and time
+        const checkVehicleBookingQuery = `
+            SELECT * FROM Appointments 
+            WHERE VehicleID = ? AND Date = ? AND Time = ?
+        `;
+        
+        const vehicleBookingResult = await new Promise((resolve, reject) => {
+            db.query(checkVehicleBookingQuery, [vehicleId, appointmentDate, slotStart], (err, result) => {
+                if (err) {
+                    console.error("Error checking vehicle booking:", err);
+                    return reject(err);
+                }
+                resolve(result);
+            });
+        });
+
+        // If the vehicle is already booked for the same date and time
+        if (vehicleBookingResult.length > 0) {
+            return res.status(400).json({ 
+                error: "This vehicle is already booked for the selected date and time. Please choose a different time slot." 
+            });
+        }
+
         // Step 2: Count appointments in the selected slot
         const checkSlotQuery = "SELECT COUNT(*) as count FROM Appointments WHERE Date = ? AND Time = ?";
         const slotResult = await new Promise((resolve, reject) => {
@@ -165,7 +188,6 @@ router.post("/make-appointment", authenticateToken, async (req, res) => {
         res.status(500).json({ error: "Internal server error" });
     }
 });
-
 
 //not tsted
 router.get("/get-not-confirmed", authenticateToken, authorizeRoles(['Admin','Customer']), async (req, res) => {
@@ -239,11 +261,15 @@ router.get("/get-confirmed-user", authenticateToken, authorizeRoles(['Customer']
             });
         }
 
+        // Modified query to exclude appointments that have JobCards
         const query = `
             SELECT a.*, v.Model as VehicleModel 
             FROM appointments a
             LEFT JOIN Vehicles v ON a.VehicleID = v.VehicleNo
-            WHERE a.CustomerID = ? AND a.Status = 'Confirmed' 
+            LEFT JOIN JobCards j ON a.AppointmentID = j.AppointmentID
+            WHERE a.CustomerID = ? 
+              AND a.Status = 'Confirmed'
+              AND j.JobCardID IS NULL
             ORDER BY a.Date ASC
         `;
         
@@ -260,8 +286,8 @@ router.get("/get-confirmed-user", authenticateToken, authorizeRoles(['Customer']
         // Format dates for consistent JSON serialization
         const formattedAppointments = appointments.map(appointment => {
             // Convert date objects to ISO strings
-            if (appointment.AppointmentDate instanceof Date) {
-                appointment.AppointmentDate = appointment.AppointmentDate.toISOString();
+            if (appointment.Date instanceof Date) {
+                appointment.Date = appointment.Date.toISOString();
             }
             if (appointment.AppointmentMadeDate instanceof Date) {
                 appointment.AppointmentMadeDate = appointment.AppointmentMadeDate.toISOString();
@@ -271,16 +297,16 @@ router.get("/get-confirmed-user", authenticateToken, authorizeRoles(['Customer']
 
         res.status(200).json({
             success: true,
-            message: "Confirmed appointments retrieved successfully",
+            message: "Confirmed appointments without JobCards retrieved successfully",
             appointments: formattedAppointments,
             count: formattedAppointments.length
         });
     } catch (error) {
         console.error("Error fetching confirmed appointments:", error);
-        res.status(500).json({ 
-            success: false, 
-            message: "Error fetching confirmed appointments", 
-            error: error.message 
+        res.status(500).json({
+            success: false,
+            message: "Error fetching confirmed appointments",
+            error: error.message
         });
     }
 });

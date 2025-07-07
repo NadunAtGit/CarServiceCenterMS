@@ -157,7 +157,7 @@ const AddJobCard = ({ onClose, getJobCards, appointmentId, getAppointments, reca
             <option value="" disabled>Select Service Type</option>
             <option value="Repair">Repair</option>
             <option value="Maintenance">Maintenance</option>
-            <option value="Inspection">Inspection</option>
+            {/* <option value="Inspection">Inspection</option> */}
           </select>
         </div>
 

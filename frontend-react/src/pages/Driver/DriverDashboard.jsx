@@ -342,17 +342,18 @@ const CompletedRequestCard = ({ request }) => {
                 Distance Traveled (km) *
               </label>
               <input
-                type="number"
-                id="distance"
-                name="distance"
-                value={invoiceData.distance}
-                onChange={handleInputChange}
-                placeholder="Enter distance in kilometers"
-                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                min="0"
-                step="0.1"
-                required
-              />
+  type="number"
+  id="distance"
+  name="distance"
+  value={invoiceData.distance}
+  onChange={handleInputChange}
+  placeholder="Enter distance in kilometers"
+  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+  min="0.1"
+  max="1000"
+  step="0.1"
+  required
+/>
               <p className="text-xs text-gray-500 mt-1">
                 This will be used to calculate the service charge based on price per km.
               </p>

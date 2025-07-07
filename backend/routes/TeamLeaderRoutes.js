@@ -172,77 +172,6 @@ router.get('/get-job-cards/today',authenticateToken,authorizeRoles(["Team Leader
 
 
 
-//     try {
-//         const { id } = req.params; // JobCardID to which mechanics are being assigned
-//         const { employeeIds } = req.body; // Array of Employee IDs for mechanics
-
-//         // Validate that employeeIds is provided and it's an array
-//         if (!employeeIds || !Array.isArray(employeeIds) || employeeIds.length === 0) {
-//             return res.status(400).json({ error: true, message: "Employee IDs are required as an array" });
-//         }
-
-//         // Check if all employees have the "Mechanic" role and are "Present"
-//         const employeeStatuses = await Promise.all(employeeIds.map(async (employeeId) => {
-//             const checkEmployeeQuery = "SELECT Role FROM Employees WHERE EmployeeID = ?";
-//             const employeeResult = await new Promise((resolve, reject) => {
-//                 db.query(checkEmployeeQuery, [employeeId], (err, result) => {
-//                     if (err) return reject(err);
-//                     resolve(result);
-//                 });
-//             });
-
-//             if (employeeResult.length === 0 || employeeResult[0].Role !== "Mechanic") {
-//                 return { employeeId, valid: false, message: "Employee is not a Mechanic" };
-//             }
-
-//             const todayDate = moment().format("YYYY-MM-DD");
-//             const checkAttendanceQuery = "SELECT * FROM Attendances WHERE EmployeeID = ? AND Date = ?";
-//             const attendanceResult = await new Promise((resolve, reject) => {
-//                 db.query(checkAttendanceQuery, [employeeId, todayDate], (err, result) => {
-//                     if (err) return reject(err);
-//                     resolve(result);
-//                 });
-//             });
-
-//             if (attendanceResult.length === 0 || attendanceResult[0].Status !== "Present") {
-//                 return { employeeId, valid: false, message: "Employee is not Present today" };
-//             }
-
-//             return { employeeId, valid: true };
-//         }));
-
-//         // Filter out employees that failed validation
-//         const invalidEmployees = employeeStatuses.filter(status => !status.valid);
-//         if (invalidEmployees.length > 0) {
-//             return res.status(400).json({
-//                 error: true,
-//                 message: "The following employees could not be assigned due to issues:",
-//                 invalidEmployees,
-//             });
-//         }
-
-//         // Proceed to assign mechanics to the job card
-//         const insertQuery = "INSERT INTO Mechanics_Assigned (JobCardID, EmployeeID) VALUES ?";
-//         const jobCardMechanicsData = employeeIds.map(employeeId => [id, employeeId]);
-
-//         // Insert mechanics into the JobCardMechanics table
-//         await new Promise((resolve, reject) => {
-//             db.query(insertQuery, [jobCardMechanicsData], (err, result) => {
-//                 if (err) return reject(err);
-//                 resolve(result);
-//             });
-//         });
-
-//         return res.status(200).json({
-//             success: true,
-//             message: "Mechanics have been successfully assigned to the job card",
-//             assignedEmployees: employeeIds,
-//         });
-//     } catch (error) {
-//         console.error("Error assigning mechanics:", error);
-//         return res.status(500).json({ error: true, message: "Server error" });
-//     }
-// });
 
 router.post("/assign-mechanics/:id", authenticateToken, authorizeRoles(["Team Leader"]), async (req, res) => {
     try {
@@ -675,7 +604,7 @@ router.get("/get-jobcards-invoicegenerated", authenticateToken, authorizeRoles([
         const jobCardsQuery = "SELECT * FROM JobCards WHERE Status = ? ORDER BY JobCardID DESC";
         
         const jobCards = await new Promise((resolve, reject) => {
-            db.query(jobCardsQuery, ["Invoice Generated"], (err, result) => {
+            db.query(jobCardsQuery, ["Paid"], (err, result) => {
                 if (err) {
                     console.error("Error fetching finished job cards:", err);
                     return reject(err);
